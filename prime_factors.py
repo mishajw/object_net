@@ -1,3 +1,6 @@
+from enum import Enum
+
+
 class PrimeFactorTree:
     def __init__(self, value: int, left, right):
         self.value = value
@@ -11,8 +14,30 @@ class PrimeFactorTree:
             return "(%d = %s * %s)" % (self.value, self.left, self.right)
 
 
+class PrimeFactorTreeStates(Enum):
+    VALUE = 0
+    LEFT_OPT = 1
+    RIGHT_OPT = 2
+
+
 def get_examples() -> [PrimeFactorTree]:
     return [__get_prime_factor_tree(x) for x in range(3, 30)]
+
+
+def tree_to_array(tree: PrimeFactorTree) -> []:
+    tree_array = []
+
+    tree_array.append([PrimeFactorTreeStates.VALUE, tree.value])
+
+    tree_array.append([PrimeFactorTreeStates.LEFT_OPT, tree.left is not None])
+    if tree.left is not None:
+        tree_array.extend(tree_to_array(tree.left))
+
+    tree_array.append([PrimeFactorTreeStates.RIGHT_OPT, tree.right is not None])
+    if tree.right is not None:
+        tree_array.extend(tree_to_array(tree.right))
+
+    return tree_array
 
 
 def __get_prime_factor_tree(x: int) -> PrimeFactorTree:
