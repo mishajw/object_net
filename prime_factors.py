@@ -31,6 +31,32 @@ def get_numpy_arrays(n: int) -> [np.array]:
     return [__tree_array_to_numpy_array(__tree_to_tree_array(tree)) for tree in get_trees(n)]
 
 
+def get_next_state(current_state: [PrimeFactorTreeStates], current_choice: float) -> [PrimeFactorTreeStates]:
+    if len(current_state) == 0:
+        return [PrimeFactorTreeStates.VALUE]
+
+    state, *stacked_states = current_state
+
+    next_state = []
+
+    if state == PrimeFactorTreeStates.VALUE:
+        next_state = [PrimeFactorTreeStates.IS_EVEN]
+    elif state == PrimeFactorTreeStates.IS_EVEN:
+        next_state = [PrimeFactorTreeStates.LEFT_OPT]
+    elif state == PrimeFactorTreeStates.LEFT_OPT:
+        if current_choice > 0.5:
+            next_state = [PrimeFactorTreeStates.VALUE, PrimeFactorTreeStates.RIGHT_OPT]
+        else:
+            next_state = [PrimeFactorTreeStates.RIGHT_OPT]
+    elif state == PrimeFactorTreeStates.RIGHT_OPT:
+        if current_choice > 0.5:
+            next_state = [PrimeFactorTreeStates.VALUE]
+        else:
+            next_state = []
+
+    return next_state + stacked_states
+
+
 def __tree_to_tree_array(tree: PrimeFactorTree) -> []:
     tree_array = []
 
