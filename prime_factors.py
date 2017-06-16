@@ -1,4 +1,5 @@
 from enum import Enum
+import numpy as np
 
 
 class PrimeFactorTree:
@@ -41,6 +42,23 @@ def tree_to_array(tree: PrimeFactorTree) -> []:
         tree_array.extend(tree_to_array(tree.right))
 
     return tree_array
+
+
+def tree_array_to_numpy_array(tree_array: []) -> np.array:
+    number_array = []
+
+    for state, value in tree_array:
+
+        if isinstance(value, bool):
+            number_value = 1 if value else 0
+        elif isinstance(value, int):
+            number_value = value
+        else:
+            raise ValueError("Can't convert type to number: %s" % value)
+
+        number_array.append([state.value, number_value])
+
+    return np.array(number_array)
 
 
 def __get_prime_factor_tree(x: int) -> PrimeFactorTree:
