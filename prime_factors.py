@@ -23,11 +23,15 @@ class PrimeFactorTreeStates(Enum):
     RIGHT_OPT = 3
 
 
-def get_examples() -> [PrimeFactorTree]:
-    return [__get_prime_factor_tree(x) for x in range(3, 30)]
+def get_trees(n: int) -> [PrimeFactorTree]:
+    return [__get_prime_factor_tree(x) for x in range(2, n + 2)]
 
 
-def tree_to_array(tree: PrimeFactorTree) -> []:
+def get_numpy_arrays(n: int) -> [np.array]:
+    return [__tree_array_to_numpy_array(__tree_to_tree_array(tree)) for tree in get_trees(n)]
+
+
+def __tree_to_tree_array(tree: PrimeFactorTree) -> []:
     tree_array = []
 
     tree_array.append([PrimeFactorTreeStates.VALUE, tree.value])
@@ -35,16 +39,16 @@ def tree_to_array(tree: PrimeFactorTree) -> []:
 
     tree_array.append([PrimeFactorTreeStates.LEFT_OPT, tree.left is not None])
     if tree.left is not None:
-        tree_array.extend(tree_to_array(tree.left))
+        tree_array.extend(__tree_to_tree_array(tree.left))
 
     tree_array.append([PrimeFactorTreeStates.RIGHT_OPT, tree.right is not None])
     if tree.right is not None:
-        tree_array.extend(tree_to_array(tree.right))
+        tree_array.extend(__tree_to_tree_array(tree.right))
 
     return tree_array
 
 
-def tree_array_to_numpy_array(tree_array: []) -> np.array:
+def __tree_array_to_numpy_array(tree_array: []) -> np.array:
     number_array = []
 
     for state, value in tree_array:
