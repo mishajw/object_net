@@ -16,7 +16,7 @@ class PrimeFactorTree:
             return "(%d = %s * %s)" % (self.value, self.left, self.right)
 
 
-class PrimeFactorTreeStates(Enum):
+class PrimeFactorTreeState(Enum):
     VALUE = 0
     IS_EVEN = 1
     LEFT_OPT = 2
@@ -31,26 +31,26 @@ def get_numpy_arrays(n: int) -> [np.array]:
     return [__tree_array_to_numpy_array(__tree_to_tree_array(tree)) for tree in get_trees(n)]
 
 
-def get_next_state(current_state: [PrimeFactorTreeStates], current_choice: float) -> [PrimeFactorTreeStates]:
+def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float) -> [PrimeFactorTreeState]:
     if len(current_state) == 0:
-        return [PrimeFactorTreeStates.VALUE]
+        return [PrimeFactorTreeState.VALUE]
 
     state, *stacked_states = current_state
 
     next_state = []
 
-    if state == PrimeFactorTreeStates.VALUE:
-        next_state = [PrimeFactorTreeStates.IS_EVEN]
-    elif state == PrimeFactorTreeStates.IS_EVEN:
-        next_state = [PrimeFactorTreeStates.LEFT_OPT]
-    elif state == PrimeFactorTreeStates.LEFT_OPT:
+    if state == PrimeFactorTreeState.VALUE:
+        next_state = [PrimeFactorTreeState.IS_EVEN]
+    elif state == PrimeFactorTreeState.IS_EVEN:
+        next_state = [PrimeFactorTreeState.LEFT_OPT]
+    elif state == PrimeFactorTreeState.LEFT_OPT:
         if current_choice > 0.5:
-            next_state = [PrimeFactorTreeStates.VALUE, PrimeFactorTreeStates.RIGHT_OPT]
+            next_state = [PrimeFactorTreeState.VALUE, PrimeFactorTreeState.RIGHT_OPT]
         else:
-            next_state = [PrimeFactorTreeStates.RIGHT_OPT]
-    elif state == PrimeFactorTreeStates.RIGHT_OPT:
+            next_state = [PrimeFactorTreeState.RIGHT_OPT]
+    elif state == PrimeFactorTreeState.RIGHT_OPT:
         if current_choice > 0.5:
-            next_state = [PrimeFactorTreeStates.VALUE]
+            next_state = [PrimeFactorTreeState.VALUE]
         else:
             next_state = []
 
@@ -60,14 +60,14 @@ def get_next_state(current_state: [PrimeFactorTreeStates], current_choice: float
 def __tree_to_tree_array(tree: PrimeFactorTree) -> []:
     tree_array = []
 
-    tree_array.append([PrimeFactorTreeStates.VALUE, tree.value])
-    tree_array.append([PrimeFactorTreeStates.IS_EVEN, tree.is_even])
+    tree_array.append([PrimeFactorTreeState.VALUE, tree.value])
+    tree_array.append([PrimeFactorTreeState.IS_EVEN, tree.is_even])
 
-    tree_array.append([PrimeFactorTreeStates.LEFT_OPT, tree.left is not None])
+    tree_array.append([PrimeFactorTreeState.LEFT_OPT, tree.left is not None])
     if tree.left is not None:
         tree_array.extend(__tree_to_tree_array(tree.left))
 
-    tree_array.append([PrimeFactorTreeStates.RIGHT_OPT, tree.right is not None])
+    tree_array.append([PrimeFactorTreeState.RIGHT_OPT, tree.right is not None])
     if tree.right is not None:
         tree_array.extend(__tree_to_tree_array(tree.right))
 
