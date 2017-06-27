@@ -7,7 +7,7 @@ class ObjectNetWriter:
 
     GetNextStateFn = Callable[[np.array, float], np.array]
 
-    def __init__(self, object_tensor: tf.Tensor, hidden_vector_size: int, get_next_state_fn: GetNextStateFn):
+    def __init__(self, truth_states_and_outputs: tf.Tensor, hidden_vector_size: int, get_next_state_fn: GetNextStateFn):
         self.hidden_vector_size = hidden_vector_size
         self.weights = [
             tf.Variable(tf.random_normal([self.hidden_vector_size, self.hidden_vector_size + 1])) for _ in range(4)]
@@ -21,12 +21,14 @@ class ObjectNetWriter:
         _, _, self.generated_outputs = tf.while_loop(
             cond=ObjectNetWriter.__while_condition,
             body=self.__while_loop,
-            loop_vars=[hidden_vector_temp, object_tensor, generated_outputs_temp],
+            loop_vars=[hidden_vector_temp, truth_states_and_outputs, generated_outputs_temp],
             shape_invariants=[
                 tf.TensorShape([self.hidden_vector_size]),  # `hidden_vector` has fixed length
                 tf.TensorShape([None, 2]),  # `object_tensor` will (for now) have be a variable length list of pairs
                                             # of state and output
                 tf.TensorShape([None])])  # `object_outputs` has variable length
+
+        self.cost = self.__get_cost(truth_states_and_outputs, self.generated_outputs)
 
     def __while_loop(self, hidden_vector, states_and_outputs, object_outputs):
         current_states_and_outputs = states_and_outputs[0]
@@ -64,6 +66,12 @@ class ObjectNetWriter:
     @staticmethod
     def __while_condition(_, states_and_outputs, __):
         return tf.not_equal(tf.shape(states_and_outputs)[0], 0)
+
+    @staticmethod
+    def __get_cost(truth_states_and_outputs: tf.Tensor, generated_outputs: tf.Tensor):
+        truth_outputs = tf.slice(truth_states_and_outputs, [0, 1], [-1, 1])
+
+        return tf.sqrt(tf.reduce_mean(tf.square(tf.abs(truth_outputs - generated_outputs))))
 
     @staticmethod
     def __wrap_state_function(get_next_state_fn: GetNextStateFn) -> GetNextStateFn:
