@@ -59,9 +59,9 @@ class ObjectNetWriter:
         weights = tf.reshape(weights, [self.hidden_vector_size, self.hidden_vector_size + 1])
         biases = tf.reshape(biases, [self.hidden_vector_size + 1])
 
-        activations = tf.squeeze(tf.sigmoid(tf.matmul(tf.expand_dims(hidden_vector, axis=0), weights) + biases))
+        activations = tf.squeeze(tf.matmul(tf.expand_dims(hidden_vector, axis=0), weights) + biases)
 
-        next_hidden_vector = tf.slice(activations, [0], [self.hidden_vector_size])
+        next_hidden_vector = tf.sigmoid(tf.slice(activations, [0], [self.hidden_vector_size]))
         current_choice = tf.slice(activations, [self.hidden_vector_size], [-1])
 
         return next_hidden_vector, truth_states[1:], tf.concat([object_outputs, current_choice], axis=0)
