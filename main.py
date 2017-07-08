@@ -13,7 +13,6 @@ def main():
     tf_utils.generic_runner.add_arguments(parser)
     tf_utils.data_holder.add_arguments(parser)
     args = parser.parse_args()
-    batch_size = args.batch_size
 
     # Generate data
     print("Generating data...")
@@ -33,7 +32,6 @@ def main():
         truth_states_ta,
         truth_outputs_ta,
         hidden_vector_size=32,
-        batch_size=batch_size,
         get_next_state_fn=prime_factors.get_next_state)
 
     tf.summary.scalar("object_net/cost", object_net.cost)
@@ -70,7 +68,7 @@ def main():
         args,
         "object_net",
         get_batch_fn=lambda size: (data_holder.get_batch(size), None),
-        testing_data=None,  # (data_holder.get_test_data(), None),
+        testing_data=(data_holder.get_test_data(), None),
         test_step_fn=test_step,
         train_step_fn=train_step)
 

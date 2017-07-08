@@ -12,11 +12,9 @@ class ObjectNetWriter:
             truth_states: tf.TensorArray,
             truth_outputs: tf.TensorArray,
             hidden_vector_size: int,
-            batch_size: int,
             get_next_state_fn: GetNextStateFn):
 
         self.hidden_vector_size = hidden_vector_size
-        self.batch_size = batch_size
         self.weights = [
             tf.Variable(tf.random_normal([self.hidden_vector_size, self.hidden_vector_size + 1])) for _ in range(4)]
         self.biases = [
@@ -51,7 +49,7 @@ class ObjectNetWriter:
             loop_vars=[
                 tf.constant(0),
                 truth_states,
-                tf.TensorArray(dtype=tf.float32, size=self.batch_size)])
+                tf.TensorArray(dtype=tf.float32, size=truth_states.size())])
 
         self.cost = self.__get_cost(truth_outputs, self.generated_outputs_ta)
 
@@ -113,7 +111,7 @@ class ObjectNetWriter:
                 0,
                 truth_outputs_ta,
                 generated_outputs_ta,
-                tf.TensorArray(dtype=tf.float32, size=self.batch_size)])
+                tf.TensorArray(dtype=tf.float32, size=truth_outputs_ta.size())])
 
         return tf.reduce_mean(costs_ta.stack())
 
