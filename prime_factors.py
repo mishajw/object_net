@@ -7,7 +7,9 @@ class PrimeFactorTree:
         self.value = value
         self.left = left
         self.right = right
-        self.is_even = self.value % 2 == 0
+
+        self.mod_three = [0, 0, 0]
+        self.mod_three[self.value % 3] = 1
 
     def __str__(self):
         if self.left is None and self.right is None:
@@ -18,7 +20,7 @@ class PrimeFactorTree:
 
 class PrimeFactorTreeState(Enum):
     VALUE = 0
-    IS_EVEN = 1
+    MOD_THREE = 1
     LEFT_OPT = 2
     RIGHT_OPT = 3
 
@@ -61,7 +63,7 @@ def __tree_to_array(tree: PrimeFactorTree) -> [(int, [int])]:
     array = []
 
     array.append((PrimeFactorTreeState.VALUE.value, __outputs_to_numbers([tree.value])))
-    array.append((PrimeFactorTreeState.IS_EVEN.value, __outputs_to_numbers([tree.is_even])))
+    array.append((PrimeFactorTreeState.MOD_THREE.value, __outputs_to_numbers(tree.mod_three)))
 
     array.append((PrimeFactorTreeState.LEFT_OPT.value, __outputs_to_numbers([tree.left is not None])))
     if tree.left is not None:
