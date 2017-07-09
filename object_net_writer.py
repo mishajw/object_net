@@ -15,9 +15,11 @@ class ObjectNetWriter:
             truth_states_padded: tf.Tensor,
             truth_outputs_padded: tf.Tensor,
             hidden_vector_size: int,
+            fully_connected_sizes: [int],
             state_outputs: [int],
             get_next_state_fn: GetNextStateFn):
         self.hidden_vector_size = hidden_vector_size
+        self.fully_connected_sizes = fully_connected_sizes
         self.state_outputs = state_outputs
         self.get_next_state_fn = ObjectNetWriter.__wrap_state_function(get_next_state_fn)
 
@@ -102,20 +104,28 @@ class ObjectNetWriter:
         with tf.variable_scope("guess_layers_%d" % state_number):
             num_outputs = self.state_outputs[state_number]
 
-            weights = tf_utils.try_create_scoped_variable(
-                "weights",
-                shape=[self.hidden_vector_size, self.hidden_vector_size + num_outputs],
-                initializer=tf.random_normal_initializer())
+            current_input = hidden_vector
+            current_input_size = self.hidden_vector_size
 
-            biases = tf_utils.try_create_scoped_variable(
-                "biases",
-                shape=[self.hidden_vector_size + num_outputs],
-                initializer=tf.zeros_initializer())
+            for i, size in enumerate(self.fully_connected_sizes + [self.hidden_vector_size + num_outputs]):
+                weights = tf_utils.try_create_scoped_variable(
+                    "weights_%d" % i,
+                    shape=[current_input_size, size],
+                    initializer=tf.random_normal_initializer())
 
-            activations = tf.squeeze(tf.matmul(tf.expand_dims(hidden_vector, axis=0), weights) + biases)
+                biases = tf_utils.try_create_scoped_variable(
+                    "biases_%d" % i,
+                    shape=[size],
+                    initializer=tf.zeros_initializer())
 
-            next_hidden_vector = tf.sigmoid(tf.slice(activations, [0], [self.hidden_vector_size]))
-            current_choice = tf.slice(activations, [self.hidden_vector_size], [-1])
+                current_input = tf.squeeze(tf.matmul(tf.expand_dims(current_input, axis=0), weights) + biases)
+                current_input_size = size
+
+                if i < len(self.fully_connected_sizes):
+                    current_input = tf.sigmoid(current_input)
+
+            next_hidden_vector = tf.sigmoid(tf.slice(current_input, [0], [self.hidden_vector_size]))
+            current_choice = tf.slice(current_input, [self.hidden_vector_size], [-1])
 
             return next_hidden_vector, current_choice
 

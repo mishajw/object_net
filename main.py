@@ -14,6 +14,7 @@ def main():
         "--config", is_config_file=True, default="./object_net.ini", help="Path of ini configuration file")
     parser.add_argument("--num_data", type=int, default=10000, help="Amount of examples to load")
     parser.add_argument("--hidden_vector_length", type=int, default=64)
+    parser.add_argument("--fully_connected_sizes", type=str, default="256,256")
     tf_utils.generic_runner.add_arguments(parser)
     tf_utils.data_holder.add_arguments(parser)
     args = parser.parse_args()
@@ -41,6 +42,7 @@ def main():
         truth_states_padded,
         truth_outputs_padded,
         hidden_vector_size=args.hidden_vector_length,
+        fully_connected_sizes=tf_utils.int_array_from_str(args.fully_connected_sizes),
         state_outputs=[1, 3, 1, 1],
         get_next_state_fn=prime_factors.get_next_state)
 
