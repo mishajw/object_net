@@ -1,4 +1,4 @@
-import argparse
+import configargparse
 import numpy as np
 import object_net_writer
 import prime_factors
@@ -9,7 +9,9 @@ import tf_utils
 
 def main():
     # Handle program arguments
-    parser = argparse.ArgumentParser()
+    parser = configargparse.ArgParser()
+    parser.add_argument(
+        "--config", is_config_file=True, default="./object_net.ini", help="Path of ini configuration file")
     tf_utils.generic_runner.add_arguments(parser)
     tf_utils.data_holder.add_arguments(parser)
     args = parser.parse_args()
