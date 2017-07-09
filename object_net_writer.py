@@ -67,8 +67,7 @@ class ObjectNetWriter:
             tf.shape(truth_outputs_counts)[1]).stack()
 
         # TODO: Update __get_cost
-        self.cost = self.__get_cost(
-            truth_outputs_padded, self.generated_outputs_padded, truth_step_counts, truth_outputs_counts)
+        self.cost = self.__get_cost(truth_outputs_padded, self.generated_outputs_padded)
 
     def __while_loop(
             self,
@@ -115,17 +114,10 @@ class ObjectNetWriter:
         return step < current_step_count
 
     @staticmethod
-    def __get_cost(truth_outputs_padded, generated_outputs_padded, truth_step_counts, truth_outputs_counts):
-        outputs_mask = tf.map_fn(
-            fn=lambda t: tf.cast(tf.sequence_mask(t, tf.shape(truth_outputs_padded)[2]), tf.int32),
-            elems=truth_outputs_counts,
-            name="outputs_mask")
-
+    def __get_cost(truth_outputs_padded, generated_outputs_padded):
         tf.assert_equal(tf.shape(truth_outputs_padded), tf.shape(generated_outputs_padded))
 
-        outputs_difference = (truth_outputs_padded - generated_outputs_padded) * tf.cast(outputs_mask, tf.float32)
-
-        return tf.sqrt(tf.reduce_mean(tf.square(tf.abs(outputs_difference))))
+        return tf.sqrt(tf.reduce_mean(tf.square(tf.abs(truth_outputs_padded - generated_outputs_padded))))
 
     @staticmethod
     def __wrap_state_function(get_next_state_fn: GetNextStateFn) -> GetNextStateFn:
