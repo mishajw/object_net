@@ -37,6 +37,7 @@ def main():
         truth_states_padded,
         truth_outputs_padded,
         hidden_vector_size=32,
+        state_outputs=[1, 3, 1, 1],
         get_next_state_fn=prime_factors.get_next_state)
 
     tf.summary.scalar("object_net/cost", object_net.cost)
