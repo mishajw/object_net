@@ -1,6 +1,6 @@
-import tensorflow as tf
-import numpy as np
 from typing import Callable
+import numpy as np
+import tensorflow as tf
 
 
 class ObjectNetWriter:
@@ -9,8 +9,10 @@ class ObjectNetWriter:
 
     def __init__(
             self,
-            truth_states: tf.TensorArray,
-            truth_outputs: tf.TensorArray,
+            truth_step_counts: tf.Tensor,
+            truth_outputs_counts: tf.Tensor,
+            truth_states_padded: tf.Tensor,
+            truth_outputs_padded: tf.Tensor,
             hidden_vector_size: int,
             get_next_state_fn: GetNextStateFn):
 
@@ -21,40 +23,62 @@ class ObjectNetWriter:
             tf.Variable(tf.random_normal([self.hidden_vector_size + 1])) for _ in range(4)]
         self.get_next_state_fn = ObjectNetWriter.__wrap_state_function(get_next_state_fn)
 
-        def batch_while_loop(step, batch_input_ta: tf.TensorArray, batch_output_ta: tf.TensorArray):
-            current_input = batch_input_ta.read(step)
-            current_hidden_vector = tf.zeros([self.hidden_vector_size], name="hidden_vector")
-            current_output = tf.zeros([0], name="generated_outputs")
+        num_batches = tf.shape(truth_step_counts)[0]
 
-            # TODO: Investigate using TensorArrays for this while loop
-            _, _, current_output = tf.while_loop(
+        def batch_while_loop(step, batch_output_ta: tf.TensorArray):
+            current_step_count = truth_step_counts[step]
+            current_states_padded = truth_states_padded[step]
+
+            current_hidden_vector = tf.zeros([self.hidden_vector_size], name="hidden_vector")
+            current_output_ta = tf.TensorArray(dtype=tf.float32, size=current_step_count)
+
+            *_, current_output = tf.while_loop(
                 cond=ObjectNetWriter.__while_condition,
                 body=self.__while_loop,
-                loop_vars=[current_hidden_vector, current_input, current_output],
+                loop_vars=[
+                    0,
+                    current_step_count,
+                    current_states_padded,
+                    current_hidden_vector,
+                    current_output_ta],
                 shape_invariants=[
-                    tf.TensorShape([self.hidden_vector_size]),  # `hidden_vector` has fixed length
-                    tf.TensorShape([None]),  # `truth_states` has variable length
-                    tf.TensorShape([None])])  # `object_outputs` has variable length
+                    tf.TensorShape([]),
+                    tf.TensorShape([]),
+                    tf.TensorShape([None]),
+                    tf.TensorShape([self.hidden_vector_size]),
+                    tf.TensorShape([])])
 
-            batch_output_ta = batch_output_ta.write(step, current_output)
+            return step + 1, batch_output_ta.write(
+                step,
+                ObjectNetWriter.__pad_ta_elements(current_output, tf.shape(truth_outputs_padded)[2]).stack())
 
-            return step + 1, batch_input_ta, batch_output_ta
+        def batch_while_condition(step, *_):
+            return step < num_batches
 
-        def batch_while_condition(step, batch_input_ta: tf.TensorArray, _):
-            return step < batch_input_ta.size()
-
-        _, _, self.generated_outputs_ta = tf.while_loop(
+        *_, generated_outputs_padded_ta = tf.while_loop(
             cond=batch_while_condition,
             body=batch_while_loop,
             loop_vars=[
                 tf.constant(0),
-                truth_states,
-                tf.TensorArray(dtype=tf.float32, size=truth_states.size())])
+                tf.TensorArray(dtype=tf.float32, size=num_batches)])
 
-        self.cost = self.__get_cost(truth_outputs, self.generated_outputs_ta)
+        self.generated_outputs_padded = ObjectNetWriter.__pad_ta_elements(
+            generated_outputs_padded_ta,
+            tf.shape(truth_outputs_counts)[1]).stack()
 
-    def __while_loop(self, hidden_vector, truth_states, object_outputs):
-        current_state = truth_states[0]
+        # TODO: Update __get_cost
+        self.cost = self.__get_cost(
+            truth_outputs_padded, self.generated_outputs_padded, truth_step_counts, truth_outputs_counts)
+
+    def __while_loop(
+            self,
+            step: int,
+            current_step_count: tf.Tensor,
+            current_states_padded: tf.Tensor,
+            current_hidden_vector: tf.Tensor,
+            current_output_ta: tf.TensorArray):
+
+        current_state = current_states_padded[step]
 
         weights = tf.case(
             pred_fn_pairs=[
@@ -74,46 +98,34 @@ class ObjectNetWriter:
             default=lambda: self.biases[0],
             exclusive=True)
 
-        weights = tf.reshape(weights, [self.hidden_vector_size, self.hidden_vector_size + 1])
-        biases = tf.reshape(biases, [self.hidden_vector_size + 1])
-
-        activations = tf.squeeze(tf.matmul(tf.expand_dims(hidden_vector, axis=0), weights) + biases)
+        activations = tf.squeeze(tf.matmul(tf.expand_dims(current_hidden_vector, axis=0), weights) + biases)
 
         next_hidden_vector = tf.sigmoid(tf.slice(activations, [0], [self.hidden_vector_size]))
         current_choice = tf.slice(activations, [self.hidden_vector_size], [-1])
 
-        return next_hidden_vector, truth_states[1:], tf.concat([object_outputs, current_choice], axis=0)
+        return \
+            step + 1, \
+            current_step_count, \
+            current_states_padded, \
+            next_hidden_vector, \
+            current_output_ta.write(step, current_choice)
 
     @staticmethod
-    def __while_condition(_, truth_states, __):
-        return tf.not_equal(tf.shape(truth_states)[0], 0)
+    def __while_condition(step, current_step_count, *_):
+        return step < current_step_count
 
-    def __get_cost(self, truth_outputs_ta: tf.TensorArray, generated_outputs_ta: tf.TensorArray):
-        def condition(step, ta, *_):
-            return step < ta.size()
+    @staticmethod
+    def __get_cost(truth_outputs_padded, generated_outputs_padded, truth_step_counts, truth_outputs_counts):
+        outputs_mask = tf.map_fn(
+            fn=lambda t: tf.cast(tf.sequence_mask(t, tf.shape(truth_outputs_padded)[2]), tf.int32),
+            elems=truth_outputs_counts,
+            name="outputs_mask")
 
-        def loop(
-                step,
-                _truth_outputs_ta: tf.TensorArray,
-                _generated_outputs_ta: tf.TensorArray,
-                _costs_ta: tf.TensorArray):
+        tf.assert_equal(tf.shape(truth_outputs_padded), tf.shape(generated_outputs_padded))
 
-            current_truth = _truth_outputs_ta.read(step)
-            current_generated = _generated_outputs_ta.read(step)
-            current_cost = tf.sqrt(tf.reduce_mean(tf.square(tf.abs(current_truth - current_generated))))
+        outputs_difference = (truth_outputs_padded - generated_outputs_padded) * tf.cast(outputs_mask, tf.float32)
 
-            return step + 1, _truth_outputs_ta, _generated_outputs_ta, _costs_ta.write(step, current_cost)
-
-        _, _, _, costs_ta = tf.while_loop(
-            cond=condition,
-            body=loop,
-            loop_vars=[
-                0,
-                truth_outputs_ta,
-                generated_outputs_ta,
-                tf.TensorArray(dtype=tf.float32, size=truth_outputs_ta.size())])
-
-        return tf.reduce_mean(costs_ta.stack())
+        return tf.sqrt(tf.reduce_mean(tf.square(tf.abs(outputs_difference))))
 
     @staticmethod
     def __wrap_state_function(get_next_state_fn: GetNextStateFn) -> GetNextStateFn:
@@ -121,3 +133,21 @@ class ObjectNetWriter:
             return np.array([int(state.value) for state in get_next_state_fn(current_state, current_value)])
 
         return wrapped
+
+    @staticmethod
+    def __pad_ta_elements(ta: tf.TensorArray, size: int) -> tf.TensorArray:
+        def body(step, padded_ta):
+            current = ta.read(step)
+            padding_shape = tf.concat([[size - tf.shape(current)[0]], tf.shape(current)[1:]], axis=0)
+            current_padded = tf.concat([current, tf.zeros(padding_shape, dtype=tf.float32)], axis=0)
+
+            padded_ta = padded_ta.write(step, current_padded)
+
+            return step + 1, padded_ta
+
+        _, ta = tf.while_loop(
+            cond=lambda step, _: step < ta.size(),
+            body=body,
+            loop_vars=[0, tf.TensorArray(dtype=tf.float32, size=ta.size())])
+
+        return ta

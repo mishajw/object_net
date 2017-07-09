@@ -16,21 +16,26 @@ def main():
 
     # Generate data
     print("Generating data...")
-    tree_arrays = prime_factors.get_numpy_arrays(10)
+    tree_arrays = prime_factors.get_tree_arrays(10)
     random.shuffle(tree_arrays)
-    padded_data, padded_data_real_length = pad_data(tree_arrays)
+    step_counts, outputs_counts, states_padded, outputs_padded = pad_data(tree_arrays)
     data_holder = tf_utils.data_holder.DataHolder(
-        args, get_data_fn=lambda i: (padded_data[i], padded_data_real_length[i]), data_length=len(padded_data))
+        args,
+        get_data_fn=lambda i: (step_counts[i], outputs_counts[i], states_padded[i], outputs_padded[i]),
+        data_length=len(step_counts))
     print("Done")
 
     # Define graph
-    truth_padded = tf.placeholder(dtype=tf.float32, shape=[None, None, 2], name="truth_padded")
-    truth_real_lengths = tf.placeholder(dtype=tf.int32, shape=[None], name="truth_real_lengths")
-    truth_states_ta, truth_outputs_ta = unpad_data(truth_padded, truth_real_lengths)
+    truth_step_counts = tf.placeholder(dtype=tf.int32, shape=[None], name="truth_step_counts")
+    truth_outputs_counts = tf.placeholder(dtype=tf.int32, shape=[None, None], name="truth_outputs_counts")
+    truth_states_padded = tf.placeholder(dtype=tf.int32, shape=[None, None], name="truth_states_padded")
+    truth_outputs_padded = tf.placeholder(dtype=tf.float32, shape=[None, None, None], name="truth_outputs_padded")
 
     object_net = object_net_writer.ObjectNetWriter(
-        truth_states_ta,
-        truth_outputs_ta,
+        truth_step_counts,
+        truth_outputs_counts,
+        truth_states_padded,
+        truth_outputs_padded,
         hidden_vector_size=32,
         get_next_state_fn=prime_factors.get_next_state)
 
@@ -39,25 +44,29 @@ def main():
 
     # Run training
     def train_step(session, step, training_input, _, summary_writer, all_summaries):
-        input_padded, input_real_lengths = training_input
+        _step_counts, _outputs_counts, _states_padded, _outputs_padded = training_input
 
         _, all_summaries = session.run(
             [optimizer, all_summaries],
             {
-                truth_padded: input_padded,
-                truth_real_lengths: input_real_lengths
+                truth_step_counts: _step_counts,
+                truth_outputs_counts: _outputs_counts,
+                truth_states_padded: _states_padded,
+                truth_outputs_padded: _outputs_padded
             })
 
         summary_writer.add_summary(all_summaries, step)
 
     def test_step(session, step, testing_input, _, summary_writer, all_summaries):
-        input_padded, input_real_lengths = testing_input
+        _step_counts, _outputs_counts, _states_padded, _outputs_padded = testing_input
 
         cost_result, all_summaries = session.run(
             [object_net.cost, all_summaries],
             {
-                truth_padded: input_padded,
-                truth_real_lengths: input_real_lengths
+                truth_step_counts: _step_counts,
+                truth_outputs_counts: _outputs_counts,
+                truth_states_padded: _states_padded,
+                truth_outputs_padded: _outputs_padded
             })
 
         summary_writer.add_summary(all_summaries, step)
@@ -73,58 +82,54 @@ def main():
         train_step_fn=train_step)
 
 
-def pad_data(data: [[[int]]]) -> (np.array, np.array):
+def pad_data(batch_data: [[(int, [float])]]) -> (np.array, np.array, np.array, np.array):
     """
-    Pad the data in the form [batch, step, state or output]
-    :param data: the data to pad
-    :return: a tuple where first is the padded data, and the second is the real size of prepadded data
+    Pad the data so that it has uniform dimensions
+    :param batch_data: a batch of the data to pad
+    :return: a tuple of four elements:
+        1) A list showing the amount of steps in each batch element
+        2) A list of lists showing the size of each output for each batch element
+        3) A list of padded lists of states
+        4) A list of padded lists of padded lists of outputs
     """
 
-    def pad(d: [[int]], size: int):
-        if len(d) == size:
-            return d
+    # Separate out the states and the outputs
+    batch_states = []
+    batch_outputs = []
+    for item in batch_data:
+        batch_states.append([state for state, _ in item])
+        batch_outputs.append([outputs for _, outputs in item])
 
-        padding = [[0, 0]] * (max_length - len(d))
-        return np.concatenate([d, padding])
+    def pad_1d(l: [], size: int):
+        if len(l) == size:
+            return l
 
-    lengths = [len(d) for d in data]
-    max_length = max(lengths)
-    padded = [pad(d, max_length) for d in data]
+        padding = [0] * (size - len(l))
+        return l + padding
 
-    return np.array(padded), np.array(lengths)
+    def pad_2d(ls: [[]], size_1: int, size_2: int):
+        inner_padded = [pad_1d(l, size_2) for l in ls]
 
+        if len(inner_padded) == size_1:
+            return inner_padded
 
-def unpad_data(data: tf.Tensor, data_real_lengths: tf.Tensor) -> (tf.TensorArray, tf.TensorArray):
-    """
-    Remove the padding from a `tf.Tensor`
-    :param data: the padded data
-    :param data_real_lengths: the original lengths of the data
-    :return: a tuple of the unpadded states and outputs
-    """
-    data_length = tf.shape(data)[0]
-    data_states_ta = tf.TensorArray(dtype=tf.float32, size=data_length)
-    data_outputs_ta = tf.TensorArray(dtype=tf.float32, size=data_length)
+        return inner_padded + [[0] * size_2] * (size_1 - len(inner_padded))
 
-    def body(
-            step,
-            _data: tf.Tensor,
-            _data_real_lengths: tf.Tensor,
-            _data_states_ta: tf.TensorArray,
-            _data_outputs_ta: tf.TensorArray):
+    step_counts = [len(states) for states in batch_states]
+    outputs_counts = [[len(output) for output in outputs] for outputs in batch_outputs]
 
-        current_state = tf.reshape(tf.slice(_data[step], [0, 0], [_data_real_lengths[step], 1]), [-1])
-        current_outputs = tf.reshape(tf.slice(_data[step], [0, 1], [_data_real_lengths[step], 1]), [-1])
+    max_steps = max(step_counts)
+    max_outputs = max([output_count for output_counts in outputs_counts for output_count in output_counts])
 
-        _data_states_ta = _data_states_ta.write(step, current_state)
-        _data_outputs_ta = _data_outputs_ta.write(step, current_outputs)
-        return step + 1, _data, _data_real_lengths, _data_states_ta, _data_outputs_ta
+    outputs_counts_padded = [pad_1d(outputs_count, max_steps) for outputs_count in outputs_counts]
+    batch_states_padded = [pad_1d(states, max_steps) for states in batch_states]
+    batch_outputs_padded = [pad_2d(outputs, max_steps, max_outputs) for outputs in batch_outputs]
 
-    *_, data_states_ta, data_outputs_ta = tf.while_loop(
-        lambda step, *_: step < data_length,
-        body=body,
-        loop_vars=[0, data, data_real_lengths, data_states_ta, data_outputs_ta])
-
-    return data_states_ta, data_outputs_ta
+    return \
+        np.array(step_counts), \
+        np.array(outputs_counts_padded), \
+        np.array(batch_states_padded), \
+        np.array(batch_outputs_padded)
 
 
 if __name__ == "__main__":

@@ -27,8 +27,8 @@ def get_trees(n: int) -> [PrimeFactorTree]:
     return [__get_prime_factor_tree(x) for x in range(2, n + 2)]
 
 
-def get_numpy_arrays(n: int) -> [np.array]:
-    return [__tree_array_to_numpy_array(__tree_to_tree_array(tree)) for tree in get_trees(n)]
+def get_tree_arrays(n: int) -> [np.array]:
+    return [__tree_to_array(tree) for tree in get_trees(n)]
 
 
 def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float) -> [PrimeFactorTreeState]:
@@ -57,38 +57,35 @@ def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float)
     return next_state + stacked_states
 
 
-def __tree_to_tree_array(tree: PrimeFactorTree) -> []:
-    tree_array = []
+def __tree_to_array(tree: PrimeFactorTree) -> [(int, [int])]:
+    array = []
 
-    tree_array.append([PrimeFactorTreeState.VALUE, tree.value])
-    tree_array.append([PrimeFactorTreeState.IS_EVEN, tree.is_even])
+    array.append((PrimeFactorTreeState.VALUE.value, __outputs_to_numbers([tree.value])))
+    array.append((PrimeFactorTreeState.IS_EVEN.value, __outputs_to_numbers([tree.is_even])))
 
-    tree_array.append([PrimeFactorTreeState.LEFT_OPT, tree.left is not None])
+    array.append((PrimeFactorTreeState.LEFT_OPT.value, __outputs_to_numbers([tree.left is not None])))
     if tree.left is not None:
-        tree_array.extend(__tree_to_tree_array(tree.left))
+        array.extend(__tree_to_array(tree.left))
 
-    tree_array.append([PrimeFactorTreeState.RIGHT_OPT, tree.right is not None])
+    array.append((PrimeFactorTreeState.RIGHT_OPT.value, __outputs_to_numbers([tree.right is not None])))
     if tree.right is not None:
-        tree_array.extend(__tree_to_tree_array(tree.right))
+        array.extend(__tree_to_array(tree.right))
 
-    return tree_array
+    return array
 
 
-def __tree_array_to_numpy_array(tree_array: []) -> np.array:
-    number_array = []
-
-    for state, value in tree_array:
-
-        if isinstance(value, bool):
-            number_value = 1 if value else 0
-        elif isinstance(value, int):
-            number_value = value
+def __outputs_to_numbers(outputs: []) -> [float]:
+    def convert(output) -> float:
+        if isinstance(output, bool):
+            return 1.0 if output else 0.0
+        elif isinstance(output, int):
+            return float(output)
+        elif isinstance(output, float):
+            return output
         else:
-            raise ValueError("Can't convert type to number: %s" % value)
+            raise ValueError("Can't convert type to number: %s" % output)
 
-        number_array.append([state.value, number_value])
-
-    return np.array(number_array)
+    return [convert(output) for output in outputs]
 
 
 def __get_prime_factor_tree(x: int) -> PrimeFactorTree:
