@@ -104,28 +104,11 @@ class ObjectNetWriter:
         with tf.variable_scope("guess_layers_%d" % state_number):
             num_outputs = self.state_outputs[state_number]
 
-            current_input = hidden_vector
-            current_input_size = self.hidden_vector_size
+            activations = self.__create_fully_connected_layers(
+                hidden_vector, self.fully_connected_sizes + [self.hidden_vector_size + num_outputs])
 
-            for i, size in enumerate(self.fully_connected_sizes + [self.hidden_vector_size + num_outputs]):
-                weights = tf_utils.try_create_scoped_variable(
-                    "weights_%d" % i,
-                    shape=[current_input_size, size],
-                    initializer=tf.random_normal_initializer())
-
-                biases = tf_utils.try_create_scoped_variable(
-                    "biases_%d" % i,
-                    shape=[size],
-                    initializer=tf.zeros_initializer())
-
-                current_input = tf.squeeze(tf.matmul(tf.expand_dims(current_input, axis=0), weights) + biases)
-                current_input_size = size
-
-                if i < len(self.fully_connected_sizes):
-                    current_input = tf.sigmoid(current_input)
-
-            next_hidden_vector = tf.sigmoid(tf.slice(current_input, [0], [self.hidden_vector_size]))
-            current_choice = tf.slice(current_input, [self.hidden_vector_size], [-1])
+            next_hidden_vector = tf.sigmoid(tf.slice(activations, [0], [self.hidden_vector_size]))
+            current_choice = tf.slice(activations, [self.hidden_vector_size], [-1])
 
             return next_hidden_vector, current_choice
 
@@ -162,3 +145,27 @@ class ObjectNetWriter:
                 loop_vars=[0, tf.TensorArray(dtype=tf.float32, size=ta.size())])
 
             return ta
+
+    @staticmethod
+    def __create_fully_connected_layers(initial_input: tf.Tensor, sizes: [int]):
+        current_input = initial_input
+        current_input_size = initial_input.shape[0]
+
+        for i, size in enumerate(sizes):
+            weights = tf_utils.try_create_scoped_variable(
+                "weights_%d" % i,
+                shape=[current_input_size, size],
+                initializer=tf.random_normal_initializer())
+
+            biases = tf_utils.try_create_scoped_variable(
+                "biases_%d" % i,
+                shape=[size],
+                initializer=tf.zeros_initializer())
+
+            current_input = tf.squeeze(tf.matmul(tf.expand_dims(current_input, axis=0), weights) + biases)
+            current_input_size = size
+
+            if i < len(sizes) - 1:
+                current_input = tf.sigmoid(current_input)
+
+        return current_input
