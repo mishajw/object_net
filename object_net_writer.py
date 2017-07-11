@@ -10,10 +10,7 @@ class ObjectNetWriter:
 
     def __init__(
             self,
-            truth_step_counts: tf.Tensor,
-            truth_outputs_counts: tf.Tensor,
-            truth_states_padded: tf.Tensor,
-            truth_outputs_padded: tf.Tensor,
+            truth_padded_data,
             initial_hidden_vector_input: tf.Tensor,
             hidden_vector_size: int,
             fully_connected_sizes: [int],
@@ -24,11 +21,11 @@ class ObjectNetWriter:
         self.state_outputs = state_outputs
         self.get_next_state_fn = ObjectNetWriter.__wrap_state_function(get_next_state_fn)
 
-        num_batches = tf.shape(truth_step_counts)[0]
+        num_batches = truth_padded_data.batch_size
 
         def batch_while_loop(step, batch_output_ta: tf.TensorArray):
-            current_step_count = truth_step_counts[step]
-            current_states_padded = truth_states_padded[step]
+            current_step_count = truth_padded_data.step_counts[step]
+            current_states_padded = truth_padded_data.states_padded[step]
             current_initial_hidden_vector_input = initial_hidden_vector_input[step]
 
             current_hidden_vector = tf.sigmoid(self.__create_fully_connected_layers(
@@ -55,7 +52,8 @@ class ObjectNetWriter:
 
             return step + 1, batch_output_ta.write(
                 step,
-                ObjectNetWriter.__pad_ta_elements(current_output, tf.shape(truth_outputs_padded)[2]).stack())
+                ObjectNetWriter.__pad_ta_elements(
+                    current_output, tf.shape(truth_padded_data.outputs_padded)[2]).stack())
 
         def batch_while_condition(step, *_):
             return step < num_batches
@@ -70,9 +68,9 @@ class ObjectNetWriter:
 
         self.generated_outputs_padded = ObjectNetWriter.__pad_ta_elements(
             generated_outputs_padded_ta,
-            tf.shape(truth_outputs_counts)[1]).stack()
+            tf.shape(truth_padded_data.outputs_counts)[1]).stack()
 
-        self.cost = self.__get_cost(truth_outputs_padded, self.generated_outputs_padded)
+        self.cost = self.__get_cost(truth_padded_data.outputs_padded, self.generated_outputs_padded)
 
     def __while_loop(
             self,
