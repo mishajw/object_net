@@ -6,7 +6,7 @@ import numpy as np
 
 def add_arguments(parser):
     parser.add_argument("--num_data", type=int, default=10000, help="Amount of examples to load")
-    parser.add_argument("--normalise_values", type=bool, default=False)
+    parser.add_argument("--normalize_values", type=bool, default=False)
 
 
 class PrimeFactorTree:
@@ -35,7 +35,7 @@ class PrimeFactorTreeState(Enum):
 def get_trees(args) -> [PrimeFactorTree]:
     trees = [__get_prime_factor_tree(x) for x in range(2, args.num_data + 2)]
 
-    if args.normalise_values:
+    if args.normalize_values:
         for tree in trees:
             tree.value /= args.num_data
 
