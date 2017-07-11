@@ -36,11 +36,15 @@ def main():
     truth_states_padded = tf.placeholder(dtype=tf.int32, shape=[None, None], name="truth_states_padded")
     truth_outputs_padded = tf.placeholder(dtype=tf.float32, shape=[None, None, None], name="truth_outputs_padded")
 
+    with tf.variable_scope("truth_initial_hidden_vector_input"):
+        truth_initial_hidden_vector_input = tf.reshape(tf.slice(truth_outputs_padded, [0, 0, 0], [-1, 1, 1]), [-1, 1])
+
     object_net = object_net_writer.ObjectNetWriter(
         truth_step_counts,
         truth_outputs_counts,
         truth_states_padded,
         truth_outputs_padded,
+        truth_initial_hidden_vector_input,
         hidden_vector_size=args.hidden_vector_length,
         fully_connected_sizes=tf_utils.int_array_from_str(args.fully_connected_sizes),
         state_outputs=[1, 3, 1, 1],

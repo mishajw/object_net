@@ -14,6 +14,7 @@ class ObjectNetWriter:
             truth_outputs_counts: tf.Tensor,
             truth_states_padded: tf.Tensor,
             truth_outputs_padded: tf.Tensor,
+            initial_hidden_vector_input: tf.Tensor,
             hidden_vector_size: int,
             fully_connected_sizes: [int],
             state_outputs: [int],
@@ -28,8 +29,11 @@ class ObjectNetWriter:
         def batch_while_loop(step, batch_output_ta: tf.TensorArray):
             current_step_count = truth_step_counts[step]
             current_states_padded = truth_states_padded[step]
+            current_initial_hidden_vector_input = initial_hidden_vector_input[step]
 
-            current_hidden_vector = tf.zeros([self.hidden_vector_size], name="hidden_vector")
+            current_hidden_vector = tf.sigmoid(self.__create_fully_connected_layers(
+                current_initial_hidden_vector_input, fully_connected_sizes + [self.hidden_vector_size]))
+
             current_output_ta = tf.TensorArray(dtype=tf.float32, size=current_step_count, name="current_output_ta")
 
             *_, current_output = tf.while_loop(
