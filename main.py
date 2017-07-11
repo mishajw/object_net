@@ -22,7 +22,7 @@ def main():
     # Generate data
     print("Generating data...")
     trees = prime_factors.get_trees(args)
-    arrays = [prime_factors.tree_to_array(tree) for tree in trees]
+    arrays = [prime_factors.tree_to_array(tree, args) for tree in trees]
     random.shuffle(arrays)
     padded_arrays = padder.PaddedData.from_unpadded(arrays)
     data_holder = tf_utils.data_holder.DataHolder(
@@ -65,7 +65,7 @@ def main():
 
         copied_testing_input = padder.PaddedData(*testing_input)
         copied_testing_input.outputs_padded = generated_outputs_padded
-        generated_trees = [prime_factors.array_to_tree(array) for array in padder.unpad(copied_testing_input)]
+        generated_trees = [prime_factors.array_to_tree(array, args) for array in padder.unpad(copied_testing_input)]
         [print(generated_tree) for generated_tree in generated_trees]
 
         summary_writer.add_summary(all_summaries, step)

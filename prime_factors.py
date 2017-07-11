@@ -1,12 +1,12 @@
 from enum import Enum
 import itertools
 import types
-import numpy as np
 
 
 def add_arguments(parser):
     parser.add_argument("--num_data", type=int, default=10000, help="Amount of examples to load")
     parser.add_argument("--normalize_values", type=bool, default=False)
+    parser.add_argument("--normalize_factor", type=int, default=10000)
 
 
 class PrimeFactorTree:
@@ -68,24 +68,24 @@ def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float)
     return next_state + stacked_states
 
 
-def tree_to_array(tree: PrimeFactorTree) -> [(int, [int])]:
+def tree_to_array(tree: PrimeFactorTree, args) -> [(int, [int])]:
     array = []
 
-    array.append((PrimeFactorTreeState.VALUE.value, __outputs_to_numbers([tree.value])))
+    array.append((PrimeFactorTreeState.VALUE.value, __outputs_to_numbers([tree.value / args.normalize_factor])))
     array.append((PrimeFactorTreeState.MOD_THREE.value, __outputs_to_numbers(tree.mod_three)))
 
     array.append((PrimeFactorTreeState.LEFT_OPT.value, __outputs_to_numbers([tree.left is not None])))
     if tree.left is not None:
-        array.extend(tree_to_array(tree.left))
+        array.extend(tree_to_array(tree.left, args))
 
     array.append((PrimeFactorTreeState.RIGHT_OPT.value, __outputs_to_numbers([tree.right is not None])))
     if tree.right is not None:
-        array.extend(tree_to_array(tree.right))
+        array.extend(tree_to_array(tree.right, args))
 
     return array
 
 
-def array_to_tree(initial_array: [(int, [int])]) -> PrimeFactorTree:
+def array_to_tree(initial_array: [(int, [int])], args) -> PrimeFactorTree:
     def get_subtree(_array, choice_state) -> (PrimeFactorTree, [(int, [int])]):
         _state, _outputs = next(_array)
         assert _state == choice_state.value
@@ -108,7 +108,7 @@ def array_to_tree(initial_array: [(int, [int])]) -> PrimeFactorTree:
 
         assert state == PrimeFactorTreeState.VALUE.value
         assert len(outputs) == 1
-        value = outputs[0]
+        value = outputs[0] * args.normalize_factor
 
         state, outputs = next(array)
         assert state == PrimeFactorTreeState.MOD_THREE.value
