@@ -33,15 +33,17 @@ class PrimeFactorTreeState(Enum):
 
 
 def get_trees(args) -> [PrimeFactorTree]:
-    return [__get_prime_factor_tree(x) for x in range(2, args.num_data + 2)]
-
-
-def get_tree_arrays(args) -> [np.array]:
-    trees = get_trees(args)
+    trees = [__get_prime_factor_tree(x) for x in range(2, args.num_data + 2)]
 
     if args.normalise_values:
         for tree in trees:
             tree.value /= args.num_data
+
+    return trees
+
+
+def get_tree_arrays(args) -> [np.array]:
+    trees = get_trees(args)
 
     return [__tree_to_array(tree) for tree in trees]
 
