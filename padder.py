@@ -5,7 +5,7 @@ import tensorflow as tf
 class PaddedData:
     @classmethod
     def from_unpadded(cls, unpadded: [[(int, [float])]]):
-        return cls(*pad_data(unpadded))
+        return cls(*pad(unpadded))
 
     def __init__(
             self,
@@ -51,10 +51,10 @@ class PlaceholderPaddedData:
         return tf.shape(self.step_counts)[0]
 
 
-def pad_data(batch_data: [[(int, [float])]]) -> (np.array, np.array, np.array, np.array):
+def pad(data: [[(int, [float])]]) -> (np.array, np.array, np.array, np.array):
     """
     Pad the data so that it has uniform dimensions
-    :param batch_data: a batch of the data to pad
+    :param data: a batch of the data to pad
     :return: a tuple of four elements:
         1) A list showing the amount of steps in each batch element
         2) A list of lists showing the size of each output for each batch element
@@ -65,7 +65,7 @@ def pad_data(batch_data: [[(int, [float])]]) -> (np.array, np.array, np.array, n
     # Separate out the states and the outputs
     batch_states = []
     batch_outputs = []
-    for item in batch_data:
+    for item in data:
         batch_states.append([state for state, _ in item])
         batch_outputs.append([outputs for _, outputs in item])
 
@@ -99,3 +99,17 @@ def pad_data(batch_data: [[(int, [float])]]) -> (np.array, np.array, np.array, n
         np.array(outputs_counts_padded), \
         np.array(batch_states_padded), \
         np.array(batch_outputs_padded)
+
+
+def unpad(padded_data: PaddedData) -> [[(int, [float])]]:
+    def unpad_single(step_count, outputs_count, states_padded, outputs_padded):
+        for i in range(step_count):
+            num_outputs = outputs_count[i]
+
+            state = states_padded[i]
+            outputs = outputs_padded[i][:num_outputs].tolist()
+
+            yield state, outputs
+
+    for data in padded_data:
+        yield unpad_single(*data)
