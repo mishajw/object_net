@@ -59,9 +59,14 @@ def main():
         summary_writer.add_summary(all_summaries, step)
 
     def test_step(session, step, testing_input, _, summary_writer, all_summaries):
-        cost_result, all_summaries = session.run(
-            [object_net.cost, all_summaries],
+        cost_result, generated_outputs_padded, all_summaries = session.run(
+            [object_net.cost, object_net.generated_outputs_padded, all_summaries],
             truth_padded_data.get_feed_dict(testing_input))
+
+        copied_testing_input = padder.PaddedData(*testing_input)
+        copied_testing_input.outputs_padded = generated_outputs_padded
+        generated_trees = [prime_factors.array_to_tree(array) for array in padder.unpad(copied_testing_input)]
+        [print(generated_tree) for generated_tree in generated_trees]
 
         summary_writer.add_summary(all_summaries, step)
 

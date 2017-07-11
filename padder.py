@@ -15,7 +15,7 @@ class PaddedData:
             outputs_padded: np.array):
 
         # Assert that all arrays are the same length
-        assert(all([step_counts.shape[0] == item.shape[0] for item in [outputs_counts, states_padded, outputs_padded]]))
+        assert(all([len(step_counts) == len(item) for item in [outputs_counts, states_padded, outputs_padded]]))
 
         self.step_counts = step_counts
         self.outputs_counts = outputs_counts
