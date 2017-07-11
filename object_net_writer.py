@@ -29,7 +29,7 @@ class ObjectNetWriter:
             current_initial_hidden_vector_input = initial_hidden_vector_input[step]
 
             current_hidden_vector = tf.sigmoid(self.__create_fully_connected_layers(
-                current_initial_hidden_vector_input, fully_connected_sizes + [self.hidden_vector_size]))
+                current_initial_hidden_vector_input, [self.hidden_vector_size]))
 
             current_output_ta = tf.TensorArray(dtype=tf.float32, size=current_step_count, name="current_output_ta")
 
