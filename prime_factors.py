@@ -1,4 +1,6 @@
 from enum import Enum
+import itertools
+import types
 import numpy as np
 
 
@@ -85,6 +87,57 @@ def __tree_to_array(tree: PrimeFactorTree) -> [(int, [int])]:
         array.extend(__tree_to_array(tree.right))
 
     return array
+
+
+def array_to_tree(initial_array: [(int, [int])]) -> PrimeFactorTree:
+    def get_subtree(_array, choice_state) -> (PrimeFactorTree, [(int, [int])]):
+        _state, _outputs = next(_array)
+        assert _state == choice_state.value
+        assert len(_outputs) == 1
+
+        # Peek at what's next in `array`, but place back in
+        next_state, next_outputs = next(_array)
+        _array = itertools.chain([(next_state, next_outputs)], _array)
+
+        if next_state == PrimeFactorTreeState.VALUE.value:
+            return get_tree(_array)
+        else:
+            return None, _array
+
+    def get_tree(array: [(int, [int])]) -> (PrimeFactorTree, [(int, [int])]):
+        try:
+            state, outputs = next(array)
+        except StopIteration:
+            return None
+
+        assert state == PrimeFactorTreeState.VALUE.value
+        assert len(outputs) == 1
+        value = outputs[0]
+
+        state, outputs = next(array)
+        assert state == PrimeFactorTreeState.MOD_THREE.value
+        assert len(outputs) == 3
+        mod_three = outputs
+
+        left, array = get_subtree(array, PrimeFactorTreeState.LEFT_OPT)
+
+        try:
+            right, array = get_subtree(array, PrimeFactorTreeState.RIGHT_OPT)
+        except StopIteration:
+            right = None
+
+        final_tree = PrimeFactorTree(value, left, right)
+        final_tree.mod_three = mod_three
+
+        return final_tree, array
+
+    # Ensure that `array` is a generator
+    if not isinstance(initial_array, types.GeneratorType):
+        initial_array = iter(initial_array)
+
+    tree, _ = get_tree(initial_array)
+
+    return tree
 
 
 def __outputs_to_numbers(outputs: []) -> [float]:
