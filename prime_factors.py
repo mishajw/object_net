@@ -10,19 +10,19 @@ def add_arguments(parser):
 
 
 class PrimeFactorTree:
-    def __init__(self, value: int, left, right):
+    def __init__(self, value: float, left, right):
         self.value = value
         self.left = left
         self.right = right
 
         self.mod_three = [0, 0, 0]
-        self.mod_three[self.value % 3] = 1
+        self.mod_three[int(self.value) % 3] = 1
 
     def __str__(self):
         if self.left is None and self.right is None:
-            return str(self.value)
+            return "%.1f" % self.value
         else:
-            return "(%d = %s * %s)" % (self.value, self.left, self.right)
+            return "(%.1f = %s * %s)" % (self.value, self.left, self.right)
 
 
 class PrimeFactorTreeState(Enum):
