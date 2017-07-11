@@ -21,13 +21,14 @@ def main():
 
     # Generate data
     print("Generating data...")
-    tree_arrays = prime_factors.get_tree_arrays(args)
-    random.shuffle(tree_arrays)
-    padded_data = padder.PaddedData.from_unpadded(tree_arrays)
+    trees = prime_factors.get_trees(args)
+    arrays = [prime_factors.tree_to_array(tree) for tree in trees]
+    random.shuffle(arrays)
+    padded_arrays = padder.PaddedData.from_unpadded(arrays)
     data_holder = tf_utils.data_holder.DataHolder(
         args,
-        get_data_fn=lambda i: padded_data[i],
-        data_length=len(padded_data))
+        get_data_fn=lambda i: padded_arrays[i],
+        data_length=len(padded_arrays))
     print("Done")
 
     # Define graph

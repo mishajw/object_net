@@ -42,12 +42,6 @@ def get_trees(args) -> [PrimeFactorTree]:
     return trees
 
 
-def get_tree_arrays(args) -> [np.array]:
-    trees = get_trees(args)
-
-    return [__tree_to_array(tree) for tree in trees]
-
-
 def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float) -> [PrimeFactorTreeState]:
     if len(current_state) == 0:
         return [PrimeFactorTreeState.VALUE]
@@ -74,7 +68,7 @@ def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float)
     return next_state + stacked_states
 
 
-def __tree_to_array(tree: PrimeFactorTree) -> [(int, [int])]:
+def tree_to_array(tree: PrimeFactorTree) -> [(int, [int])]:
     array = []
 
     array.append((PrimeFactorTreeState.VALUE.value, __outputs_to_numbers([tree.value])))
@@ -82,11 +76,11 @@ def __tree_to_array(tree: PrimeFactorTree) -> [(int, [int])]:
 
     array.append((PrimeFactorTreeState.LEFT_OPT.value, __outputs_to_numbers([tree.left is not None])))
     if tree.left is not None:
-        array.extend(__tree_to_array(tree.left))
+        array.extend(tree_to_array(tree.left))
 
     array.append((PrimeFactorTreeState.RIGHT_OPT.value, __outputs_to_numbers([tree.right is not None])))
     if tree.right is not None:
-        array.extend(__tree_to_array(tree.right))
+        array.extend(tree_to_array(tree.right))
 
     return array
 
