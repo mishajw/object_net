@@ -12,16 +12,16 @@ def main():
     parser = configargparse.ArgParser()
     parser.add_argument(
         "--config", is_config_file=True, default="./object_net.ini", help="Path of ini configuration file")
-    parser.add_argument("--num_data", type=int, default=10000, help="Amount of examples to load")
     parser.add_argument("--hidden_vector_length", type=int, default=64)
     parser.add_argument("--fully_connected_sizes", type=str, default="256,256")
     tf_utils.generic_runner.add_arguments(parser)
     tf_utils.data_holder.add_arguments(parser)
+    prime_factors.add_arguments(parser)
     args = parser.parse_args()
 
     # Generate data
     print("Generating data...")
-    tree_arrays = prime_factors.get_tree_arrays(args.num_data)
+    tree_arrays = prime_factors.get_tree_arrays(args)
     random.shuffle(tree_arrays)
     step_counts, outputs_counts, states_padded, outputs_padded = pad_data(tree_arrays)
     data_holder = tf_utils.data_holder.DataHolder(

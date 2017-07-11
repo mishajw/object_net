@@ -2,6 +2,11 @@ from enum import Enum
 import numpy as np
 
 
+def add_arguments(parser):
+    parser.add_argument("--num_data", type=int, default=10000, help="Amount of examples to load")
+    parser.add_argument("--normalise_values", type=bool, default=False)
+
+
 class PrimeFactorTree:
     def __init__(self, value: int, left, right):
         self.value = value
@@ -25,12 +30,18 @@ class PrimeFactorTreeState(Enum):
     RIGHT_OPT = 3
 
 
-def get_trees(n: int) -> [PrimeFactorTree]:
-    return [__get_prime_factor_tree(x) for x in range(2, n + 2)]
+def get_trees(args) -> [PrimeFactorTree]:
+    return [__get_prime_factor_tree(x) for x in range(2, args.num_data + 2)]
 
 
-def get_tree_arrays(n: int) -> [np.array]:
-    return [__tree_to_array(tree) for tree in get_trees(n)]
+def get_tree_arrays(args) -> [np.array]:
+    trees = get_trees(args)
+
+    if args.normalise_values:
+        for tree in trees:
+            tree.value /= args.num_data
+
+    return [__tree_to_array(tree) for tree in trees]
 
 
 def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float) -> [PrimeFactorTreeState]:
