@@ -106,11 +106,49 @@ class ObjectNetWriter:
         with tf.variable_scope("guess_layers_%d" % state_number):
             num_outputs = self.state_outputs[state_number]
 
-            activations = self.__create_fully_connected_layers(
-                hidden_vector, self.fully_connected_sizes + [self.hidden_vector_size + num_outputs])
+            with tf.variable_scope("lstm"):
+                c, h = tf.split(hidden_vector, 2, axis=0)
 
-            next_hidden_vector = tf.sigmoid(tf.slice(activations, [0], [self.hidden_vector_size]))
-            current_choice = tf.slice(activations, [self.hidden_vector_size], [-1])
+                weights_lstm = tf.get_variable(
+                    name="weights",
+                    shape=[self.hidden_vector_size / 2, self.hidden_vector_size * 2],
+                    dtype=tf.float32,
+                    initializer=tf.random_normal_initializer())
+
+                biases_lstm = tf.get_variable(
+                    name="biases",
+                    shape=[self.hidden_vector_size * 2],
+                    dtype=tf.float32,
+                    initializer=tf.zeros_initializer())
+
+                activations = tf.squeeze(tf.matmul(tf.expand_dims(h, axis=0), weights_lstm) + biases_lstm)
+
+                input_gate, new_input, forget_gate, output_gate = tf.split(
+                    value=activations, num_or_size_splits=4, axis=0)
+
+                input_gate = tf.sigmoid(input_gate)
+                new_input = tf.tanh(new_input)
+                forget_gate = tf.sigmoid(forget_gate)
+                output_gate = tf.sigmoid(output_gate)
+
+                new_c = tf.multiply(forget_gate, c) + tf.multiply(input_gate, new_input)
+                new_h = tf.multiply(output_gate, tf.tanh(c))
+
+                next_hidden_vector = tf.concat([new_c, new_h], axis=0)
+
+            weights = tf.get_variable(
+                name="weights",
+                shape=[self.hidden_vector_size / 2, num_outputs],
+                dtype=tf.float32,
+                initializer=tf.random_normal_initializer())
+
+            biases = tf.get_variable(
+                name="biases",
+                shape=[num_outputs],
+                dtype=tf.float32,
+                initializer=tf.zeros_initializer())
+
+            current_choice = tf.squeeze(tf.matmul(tf.expand_dims(new_h, axis=0), weights) + biases, axis=0)
 
             return next_hidden_vector, current_choice
 
