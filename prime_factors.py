@@ -24,6 +24,13 @@ class PrimeFactorTree:
         else:
             return "(%.1f = %s * %s)" % (self.value, self.left, self.right)
 
+    def multiply(self, x):
+        self.value *= x
+
+        if self.left is not None and self.right is not None:
+            self.left.multiply(x)
+            self.right.multiply(x)
+
 
 class PrimeFactorTreeState(Enum):
     VALUE = 0
@@ -37,7 +44,7 @@ def get_trees(args) -> [PrimeFactorTree]:
 
     if args.normalize_values:
         for tree in trees:
-            tree.value /= args.num_data
+            tree.multiply(1 / args.normalize_factor)
 
     return trees
 
@@ -71,7 +78,7 @@ def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float)
 def tree_to_array(tree: PrimeFactorTree, args) -> [(int, [int])]:
     array = []
 
-    array.append((PrimeFactorTreeState.VALUE.value, __outputs_to_numbers([tree.value / args.normalize_factor])))
+    array.append((PrimeFactorTreeState.VALUE.value, __outputs_to_numbers([tree.value])))
     array.append((PrimeFactorTreeState.MOD_THREE.value, __outputs_to_numbers(tree.mod_three)))
 
     array.append((PrimeFactorTreeState.LEFT_OPT.value, __outputs_to_numbers([tree.left is not None])))
@@ -108,7 +115,7 @@ def array_to_tree(initial_array: [(int, [int])], args) -> PrimeFactorTree:
 
         assert state == PrimeFactorTreeState.VALUE.value
         assert len(outputs) == 1
-        value = outputs[0] * args.normalize_factor
+        value = outputs[0]
 
         state, outputs = next(array)
         assert state == PrimeFactorTreeState.MOD_THREE.value
@@ -132,6 +139,9 @@ def array_to_tree(initial_array: [(int, [int])], args) -> PrimeFactorTree:
         initial_array = iter(initial_array)
 
     tree, _ = get_tree(initial_array)
+
+    if args.normalize_values:
+        tree.multiply(args.normalize_factor)
 
     return tree
 
