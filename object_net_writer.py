@@ -7,17 +7,30 @@ import tf_utils
 
 
 class ObjectNetWriter:
+    """
+    Learn to write objects using regression using ObjectNet structures
+    """
 
     GetNextStateFn = Callable[[np.array, float], np.array]
+    """Type for functions that give transitions between states"""
 
     def __init__(
             self,
-            truth_padded_data,
+            truth_padded_data: padder.PlaceholderPaddedData,
             initial_hidden_vector_input: tf.Tensor,
             hidden_vector_size: int,
             fully_connected_sizes: [int],
             state_outputs: [int],
             get_next_state_fn: GetNextStateFn):
+        """
+        Initialise TensorFlow graph
+        :param truth_padded_data: the input data
+        :param initial_hidden_vector_input: the inputs for each example in the batch
+        :param hidden_vector_size: size of hidden vectors
+        :param fully_connected_sizes: the sizes for fully connected layers
+        :param state_outputs: the respective sizes of outputs for each state
+        :param get_next_state_fn: function that gives transitions between states
+        """
         self.hidden_vector_size = hidden_vector_size
         self.fully_connected_sizes = fully_connected_sizes
         self.state_outputs = state_outputs
@@ -36,7 +49,7 @@ class ObjectNetWriter:
 
     def __batch_while_loop(
             self,
-            truth_padded_data: padder.PaddedData,
+            truth_padded_data: padder.PlaceholderPaddedData,
             initial_hidden_vector_input: tf.Tensor,
             num_batches: int) -> tf.TensorArray:
 
