@@ -2,11 +2,13 @@ from enum import Enum
 import itertools
 import types
 
+import math
+
 
 def add_arguments(parser):
     parser.add_argument("--num_data", type=int, default=10000, help="Amount of examples to load")
-    parser.add_argument("--normalize_values", type=bool, default=False)
-    parser.add_argument("--normalize_factor", type=int, default=10000)
+    parser.add_argument("--normalize_factor", type=int, default=None)
+    parser.add_argument("--log_normalize", type=bool, default=False)
 
 
 class PrimeFactorTree:
@@ -31,6 +33,20 @@ class PrimeFactorTree:
             self.left.multiply(x)
             self.right.multiply(x)
 
+    def log(self):
+        self.value = math.log(self.value) if self.value > 0 else -1
+
+        if self.left is not None and self.right is not None:
+            self.left.log()
+            self.right.log()
+
+    def pow_e(self):
+        self.value = math.pow(self.value, math.e) if self.value > 0 else -1
+
+        if self.left is not None and self.right is not None:
+            self.left.pow_e()
+            self.right.pow_e()
+
 
 class PrimeFactorTreeState(Enum):
     VALUE = 0
@@ -42,9 +58,13 @@ class PrimeFactorTreeState(Enum):
 def get_trees(args) -> [PrimeFactorTree]:
     trees = [__get_prime_factor_tree(x) for x in range(2, args.num_data + 2)]
 
-    if args.normalize_values:
+    if args.normalize_factor is not None:
         for tree in trees:
             tree.multiply(1 / args.normalize_factor)
+
+    if args.log_normalize:
+        for tree in trees:
+            tree.log()
 
     return trees
 
@@ -140,8 +160,11 @@ def array_to_tree(initial_array: [(int, [int])], args) -> PrimeFactorTree:
 
     tree, _ = get_tree(initial_array)
 
-    if args.normalize_values:
+    if args.normalize_factor is not None:
         tree.multiply(args.normalize_factor)
+
+    if args.log_normalize:
+        tree.pow_e()
 
     return tree
 
