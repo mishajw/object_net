@@ -1,4 +1,5 @@
 import configargparse
+import object_net_components
 import object_net_writer
 import padder
 import prime_factors
@@ -45,7 +46,9 @@ def main():
         hidden_vector_size=args.hidden_vector_length,
         fully_connected_sizes=tf_utils.int_array_from_str(args.fully_connected_sizes),
         state_outputs=[1, 3, 1, 1],
-        get_next_state_fn=prime_factors.get_next_state)
+        get_next_state_fn=prime_factors.get_next_state,
+        inner_hidden_vector_creator=object_net_components.LstmInnerHiddenVectorCreator(args.hidden_vector_length),
+        child_hidden_vector_combiner=object_net_components.AdditionChildHiddenVectorCombiner())
 
     tf.summary.scalar("object_net/cost", object_net.cost)
     optimizer = tf.train.AdamOptimizer().minimize(object_net.cost)

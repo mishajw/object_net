@@ -1,8 +1,8 @@
 from typing import Callable
 import numpy as np
-import tensorflow as tf
-
+import object_net_components
 import padder
+import tensorflow as tf
 import tf_utils
 
 
@@ -21,7 +21,9 @@ class ObjectNetWriter:
             hidden_vector_size: int,
             fully_connected_sizes: [int],
             state_outputs: [int],
-            get_next_state_fn: GetNextStateFn):
+            get_next_state_fn: GetNextStateFn,
+            inner_hidden_vector_creator: object_net_components.InnerHiddenVectorCreator,
+            child_hidden_vector_combiner: object_net_components.ChildHiddenVectorCombiner):
         """
         Initialise TensorFlow graph
         :param truth_padded_data: the input data
@@ -35,6 +37,8 @@ class ObjectNetWriter:
         self.fully_connected_sizes = fully_connected_sizes
         self.state_outputs = state_outputs
         self.get_next_state_fn = ObjectNetWriter.__wrap_state_function(get_next_state_fn)
+        self.inner_hidden_vector_creator = inner_hidden_vector_creator
+        self.child_hidden_vector_combiner = child_hidden_vector_combiner
 
         num_batches = truth_padded_data.batch_size
 
@@ -83,6 +87,11 @@ class ObjectNetWriter:
         return generated_outputs_padded_ta
 
     def __step_while_loop(self, step_count: int, states_padded: tf.Tensor, hidden_vector: tf.Tensor):
+        def create_guess_layers(_hidden_vector: tf.Tensor, state_number: int):
+            with tf.variable_scope("guess_layers_%d" % state_number):
+                num_outputs = self.state_outputs[state_number]
+                return self.inner_hidden_vector_creator(tf.zeros_like(_hidden_vector), _hidden_vector, num_outputs)
+
         def body(
                 step: int,
                 current_step_count: tf.Tensor,
@@ -95,7 +104,7 @@ class ObjectNetWriter:
             next_hidden_vector, current_choice = tf.case(
                 pred_fn_pairs=[(
                     tf.equal(current_state, i),
-                    lambda i=i: self.__create_guess_layers(current_hidden_vector, i))
+                    lambda i=i: create_guess_layers(current_hidden_vector, i))
                     for i in range(len(self.state_outputs))],
                 default=lambda: (current_hidden_vector, tf.constant(0, dtype=tf.float32) / tf.constant(0, tf.float32)))
 
@@ -129,56 +138,6 @@ class ObjectNetWriter:
             name="step_while_loop")
 
         return current_output
-
-    def __create_guess_layers(self, hidden_vector: tf.Tensor, state_number: int):
-        with tf.variable_scope("guess_layers_%d" % state_number):
-            num_outputs = self.state_outputs[state_number]
-
-            with tf.variable_scope("lstm"):
-                c, h = tf.split(hidden_vector, 2, axis=0)
-
-                weights_lstm = tf.get_variable(
-                    name="weights",
-                    shape=[self.hidden_vector_size / 2, self.hidden_vector_size * 2],
-                    dtype=tf.float32,
-                    initializer=tf.random_normal_initializer())
-
-                biases_lstm = tf.get_variable(
-                    name="biases",
-                    shape=[self.hidden_vector_size * 2],
-                    dtype=tf.float32,
-                    initializer=tf.zeros_initializer())
-
-                activations = tf.squeeze(tf.matmul(tf.expand_dims(h, axis=0), weights_lstm) + biases_lstm)
-
-                input_gate, new_input, forget_gate, output_gate = tf.split(
-                    value=activations, num_or_size_splits=4, axis=0)
-
-                input_gate = tf.sigmoid(input_gate)
-                new_input = tf.tanh(new_input)
-                forget_gate = tf.sigmoid(forget_gate)
-                output_gate = tf.sigmoid(output_gate)
-
-                new_c = tf.multiply(forget_gate, c) + tf.multiply(input_gate, new_input)
-                new_h = tf.multiply(output_gate, tf.tanh(c))
-
-                next_hidden_vector = tf.concat([new_c, new_h], axis=0)
-
-            weights = tf.get_variable(
-                name="weights",
-                shape=[self.hidden_vector_size / 2, num_outputs],
-                dtype=tf.float32,
-                initializer=tf.random_normal_initializer())
-
-            biases = tf.get_variable(
-                name="biases",
-                shape=[num_outputs],
-                dtype=tf.float32,
-                initializer=tf.zeros_initializer())
-
-            current_choice = tf.squeeze(tf.matmul(tf.expand_dims(new_h, axis=0), weights) + biases, axis=0)
-
-            return next_hidden_vector, current_choice
 
     @staticmethod
     def __get_cost(truth_outputs_padded, generated_outputs_padded):
