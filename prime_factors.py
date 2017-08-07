@@ -1,14 +1,18 @@
-from enum import Enum
 import itertools
-import types
-
 import math
+import numpy as np
+import state_transition_type
+import states
+import types
 
 
 def add_arguments(parser):
     parser.add_argument("--num_data", type=int, default=10000, help="Amount of examples to load")
     parser.add_argument("--normalize_factor", type=int, default=None)
     parser.add_argument("--log_normalize", type=bool, default=False)
+
+
+state_encoder = states.StateEncoder(["value", "mod_three", "left_opt", "right_opt"])
 
 
 class PrimeFactorTree:
@@ -48,13 +52,6 @@ class PrimeFactorTree:
             self.right.pow_e()
 
 
-class PrimeFactorTreeState(Enum):
-    VALUE = 0
-    MOD_THREE = 1
-    LEFT_OPT = 2
-    RIGHT_OPT = 3
-
-
 def get_trees(args) -> [PrimeFactorTree]:
     trees = [__get_prime_factor_tree(x) for x in range(2, args.num_data + 2)]
 
@@ -69,43 +66,38 @@ def get_trees(args) -> [PrimeFactorTree]:
     return trees
 
 
-def get_next_state(current_state: [PrimeFactorTreeState], current_choice: float) -> [PrimeFactorTreeState]:
-    if len(current_state) == 0:
-        return [PrimeFactorTreeState.VALUE]
+def get_next_state(state_stack: [int], output: np.array) -> state_transition_type.StateTransitionType:
+    state, state_stack = state_stack
 
-    state, *stacked_states = current_state
+    state_string = state_encoder.decode(state)
 
-    next_state = []
-
-    if state == PrimeFactorTreeState.VALUE:
-        next_state = [PrimeFactorTreeState.IS_EVEN]
-    elif state == PrimeFactorTreeState.IS_EVEN:
-        next_state = [PrimeFactorTreeState.LEFT_OPT]
-    elif state == PrimeFactorTreeState.LEFT_OPT:
-        if current_choice > 0.5:
-            next_state = [PrimeFactorTreeState.VALUE, PrimeFactorTreeState.RIGHT_OPT]
+    if state_string is "value":
+        return state_transition_type.ContinueObject(state_encoder.encode("mod_three"))
+    elif state_string is "mod_three":
+        return state_transition_type.ContinueObject(state_encoder.encode("left_opt"))
+    elif state_string is "left_opt":
+        if output[0] > 0.5:
+            return state_transition_type.StartObject(state_encoder.encode("value"), state_encoder.encode("right_opt"))
         else:
-            next_state = [PrimeFactorTreeState.RIGHT_OPT]
-    elif state == PrimeFactorTreeState.RIGHT_OPT:
-        if current_choice > 0.5:
-            next_state = [PrimeFactorTreeState.VALUE]
+            return state_transition_type.ContinueObject(state_encoder.encode("right_opt"))
+    elif state_string is "right_opt":
+        if output[0] > 0.5:
+            return state_transition_type.StartObjectThenStop(state_encoder.encode("value"))
         else:
-            next_state = []
-
-    return next_state + stacked_states
+            return state_transition_type.StopObject()
 
 
 def tree_to_array(tree: PrimeFactorTree, args) -> [(int, [int])]:
     array = []
 
-    array.append((PrimeFactorTreeState.VALUE.value, __outputs_to_numbers([tree.value])))
-    array.append((PrimeFactorTreeState.MOD_THREE.value, __outputs_to_numbers(tree.mod_three)))
+    array.append((state_encoder.encode("value"), __outputs_to_numbers([tree.value])))
+    array.append((state_encoder.encode("mod_three"), __outputs_to_numbers(tree.mod_three)))
 
-    array.append((PrimeFactorTreeState.LEFT_OPT.value, __outputs_to_numbers([tree.left is not None])))
+    array.append((state_encoder.encode("left_opt"), __outputs_to_numbers([tree.left is not None])))
     if tree.left is not None:
         array.extend(tree_to_array(tree.left, args))
 
-    array.append((PrimeFactorTreeState.RIGHT_OPT.value, __outputs_to_numbers([tree.right is not None])))
+    array.append((state_encoder.encode("right_opt"), __outputs_to_numbers([tree.right is not None])))
     if tree.right is not None:
         array.extend(tree_to_array(tree.right, args))
 
@@ -113,16 +105,16 @@ def tree_to_array(tree: PrimeFactorTree, args) -> [(int, [int])]:
 
 
 def array_to_tree(initial_array: [(int, [int])], args) -> PrimeFactorTree:
-    def get_subtree(_array, choice_state) -> (PrimeFactorTree, [(int, [int])]):
+    def get_subtree(_array, choice_state: int) -> (PrimeFactorTree, [(int, [int])]):
         _state, _outputs = next(_array)
-        assert _state == choice_state.value
+        assert _state == choice_state
         assert len(_outputs) == 1
 
         # Peek at what's next in `array`, but place back in
         next_state, next_outputs = next(_array)
         _array = itertools.chain([(next_state, next_outputs)], _array)
 
-        if next_state == PrimeFactorTreeState.VALUE.value:
+        if next_state == state_encoder.encode("value"):
             return get_tree(_array)
         else:
             return None, _array
@@ -133,19 +125,19 @@ def array_to_tree(initial_array: [(int, [int])], args) -> PrimeFactorTree:
         except StopIteration:
             return None
 
-        assert state == PrimeFactorTreeState.VALUE.value
+        assert state == state_encoder.encode("value")
         assert len(outputs) == 1
         value = outputs[0]
 
         state, outputs = next(array)
-        assert state == PrimeFactorTreeState.MOD_THREE.value
+        assert state == state_encoder.encode("mod_three")
         assert len(outputs) == 3
         mod_three = outputs
 
-        left, array = get_subtree(array, PrimeFactorTreeState.LEFT_OPT)
+        left, array = get_subtree(array, state_encoder.encode("left_opt"))
 
         try:
-            right, array = get_subtree(array, PrimeFactorTreeState.RIGHT_OPT)
+            right, array = get_subtree(array, state_encoder.encode("right_opt"))
         except StopIteration:
             right = None
 

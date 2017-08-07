@@ -1,7 +1,6 @@
-from typing import Callable
-import numpy as np
 import object_net_components
 import padder
+import states
 import tensorflow as tf
 import tf_utils
 
@@ -11,9 +10,6 @@ class ObjectNetWriter:
     Learn to write objects using regression using ObjectNet structures
     """
 
-    GetNextStateFn = Callable[[np.array, float], np.array]
-    """Type for functions that give transitions between states"""
-
     def __init__(
             self,
             truth_padded_data: padder.PlaceholderPaddedData,
@@ -21,7 +17,7 @@ class ObjectNetWriter:
             hidden_vector_size: int,
             fully_connected_sizes: [int],
             state_outputs: [int],
-            get_next_state_fn: GetNextStateFn,
+            get_next_state_fn: states.GetNextStateFn,
             inner_hidden_vector_creator: object_net_components.InnerHiddenVectorCreator,
             child_hidden_vector_combiner: object_net_components.ChildHiddenVectorCombiner):
         """
@@ -35,8 +31,8 @@ class ObjectNetWriter:
         """
         self.hidden_vector_size = hidden_vector_size
         self.fully_connected_sizes = fully_connected_sizes
-        self.state_outputs = state_outputs
-        self.get_next_state_fn = ObjectNetWriter.__wrap_state_function(get_next_state_fn)
+        self.state_outputs = [0] + state_outputs
+        self.get_next_state_fn = get_next_state_fn
         self.inner_hidden_vector_creator = inner_hidden_vector_creator
         self.child_hidden_vector_combiner = child_hidden_vector_combiner
 
@@ -146,13 +142,6 @@ class ObjectNetWriter:
 
             return tf.sqrt(
                 tf.reduce_mean(tf.square(tf.abs(truth_outputs_padded - generated_outputs_padded))), name="cost")
-
-    @staticmethod
-    def __wrap_state_function(get_next_state_fn: GetNextStateFn) -> GetNextStateFn:
-        def wrapped(current_state: [int], current_value: [float]) -> [int]:
-            return np.array([int(state.value) for state in get_next_state_fn(current_state, current_value)])
-
-        return wrapped
 
     @staticmethod
     def __pad_ta_elements(ta: tf.TensorArray, size: int) -> tf.TensorArray:
