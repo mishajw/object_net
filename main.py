@@ -40,15 +40,21 @@ def main():
             tf.slice(truth_padded_data.outputs_padded, [0, 0, 0], [-1, 1, 1]),
             [-1, 1])
 
-    object_net = object_net_writer.ObjectNetWriter(
-        truth_padded_data,
-        truth_initial_hidden_vector_input,
-        hidden_vector_size=args.hidden_vector_length,
-        fully_connected_sizes=tf_utils.int_array_from_str(args.fully_connected_sizes),
-        state_outputs=[1, 3, 1, 1],
-        get_next_state_fn=prime_factors.get_next_state,
-        inner_hidden_vector_creator=object_net_components.LstmInnerHiddenVectorCreator(args.hidden_vector_length),
-        child_hidden_vector_combiner=object_net_components.AdditionChildHiddenVectorCombiner())
+    def get_object_net_writer(training: bool) -> object_net_writer.ObjectNetWriter:
+        return object_net_writer.ObjectNetWriter(
+            truth_padded_data,
+            truth_initial_hidden_vector_input,
+            hidden_vector_size=args.hidden_vector_length,
+            fully_connected_sizes=tf_utils.int_array_from_str(args.fully_connected_sizes),
+            state_outputs=[1, 3, 1, 1],
+            update_state_stack_fn=prime_factors.update_state_stack,
+            initial_state=1,
+            training=training,
+            inner_hidden_vector_creator=object_net_components.LstmInnerHiddenVectorCreator(args.hidden_vector_length),
+            child_hidden_vector_combiner=object_net_components.AdditionChildHiddenVectorCombiner())
+
+    object_net = get_object_net_writer(training=True)
+    object_net_test = get_object_net_writer(training=False)
 
     tf.summary.scalar("object_net/cost", object_net.cost)
     optimizer = tf.train.AdamOptimizer().minimize(object_net.cost)
@@ -62,14 +68,33 @@ def main():
         summary_writer.add_summary(all_summaries, step)
 
     def test_step(session, step, testing_input, _, summary_writer, all_summaries):
-        cost_result, generated_outputs_padded, all_summaries = session.run(
-            [object_net.cost, object_net.generated_outputs_padded, all_summaries],
-            truth_padded_data.get_feed_dict(testing_input))
+        cost_result, \
+            generated_states_padded, \
+            generated_outputs_padded, \
+            generated_outputs_counts_padded, \
+            generated_step_counts, \
+            all_summaries = session.run(
+                [
+                    object_net_test.cost,
+                    object_net_test.generated_states_padded,
+                    object_net_test.generated_outputs_padded,
+                    object_net_test.generated_outputs_counts_padded,
+                    object_net_test.generated_step_counts,
+                    all_summaries],
+                truth_padded_data.get_feed_dict(testing_input))
 
-        copied_testing_input = padder.PaddedData(*testing_input)
-        copied_testing_input.outputs_padded = generated_outputs_padded
-        generated_trees = [prime_factors.array_to_tree(array, args) for array in padder.unpad(copied_testing_input)]
-        [print(generated_tree) for generated_tree in generated_trees]
+        copied_testing_input = padder.PaddedData(
+            generated_step_counts, generated_outputs_counts_padded, generated_states_padded, generated_outputs_padded)
+        unpadded = padder.unpad(copied_testing_input)
+
+        def try_array_to_tree(_array, _args):
+            try:
+                return prime_factors.array_to_tree(_array, _args)
+            except StopIteration:
+                return prime_factors.PrimeFactorTree(-1, None, None)
+
+        generated_trees = [try_array_to_tree(array, args) for array in unpadded]
+        [print(generated_tree) for generated_tree in generated_trees[:10]]
 
         summary_writer.add_summary(all_summaries, step)
 
