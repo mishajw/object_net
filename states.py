@@ -1,13 +1,13 @@
 from typing import Callable
-import numpy as np
-import state_transition_type
+import state_stack
+import tensorflow as tf
 
 
-GetNextStateFn = Callable[[int, np.array], state_transition_type.StateTransitionType]
+UpdateStateStackFn = Callable[[state_stack.StateStack, tf.Tensor, tf.Tensor], state_stack.StateStack]
 """
-Type for functions that give transitions between states
-The function takes the current state as an integer, and the output from the current choice
-The function returns the next state as an integer, and the `StateTransitionType`
+Type for functions that give transitions between states by modifying a state stack
+The function takes the current state stack, the current hidden vector, and the output from the current choice
+The function returns the new state stack
 """
 
 

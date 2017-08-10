@@ -66,7 +66,7 @@ def get_trees(args) -> [PrimeFactorTree]:
     return trees
 
 
-def get_next_state(
+def update_state_stack(
         stack: state_stack.StateStack, hidden_vector: tf.Tensor, output: tf.Tensor) -> state_stack.StateStack:
 
     state, _, stack = state_stack.pop(stack)
