@@ -1,8 +1,8 @@
 import itertools
 import math
-import numpy as np
-import state_transition_type
+import state_stack
 import states
+import tensorflow as tf
 import types
 
 
@@ -66,25 +66,41 @@ def get_trees(args) -> [PrimeFactorTree]:
     return trees
 
 
-def get_next_state(state_stack: [int], output: np.array) -> state_transition_type.StateTransitionType:
-    state, state_stack = state_stack
+def get_next_state(
+        stack: state_stack.StateStack, hidden_vector: tf.Tensor, output: tf.Tensor) -> state_stack.StateStack:
 
-    state_string = state_encoder.decode(state)
+    state, _, stack = state_stack.pop(stack)
+    tf.reshape(state, [])
 
-    if state_string is "value":
-        return state_transition_type.ContinueObject(state_encoder.encode("mod_three"))
-    elif state_string is "mod_three":
-        return state_transition_type.ContinueObject(state_encoder.encode("left_opt"))
-    elif state_string is "left_opt":
-        if output[0] > 0.5:
-            return state_transition_type.StartObject(state_encoder.encode("value"), state_encoder.encode("right_opt"))
-        else:
-            return state_transition_type.ContinueObject(state_encoder.encode("right_opt"))
-    elif state_string is "right_opt":
-        if output[0] > 0.5:
-            return state_transition_type.StartObjectThenStop(state_encoder.encode("value"))
-        else:
-            return state_transition_type.StopObject()
+    tensor, element_count = tf.case(
+        pred_fn_pairs=[
+            (
+                tf.equal(state, state_encoder.encode("value")),
+                lambda: state_stack.push(stack, state_encoder.encode("mod_three"), hidden_vector)),
+            (
+                tf.equal(state, state_encoder.encode("mod_three")),
+                lambda: state_stack.push(stack, state_encoder.encode("left_opt"), hidden_vector)),
+            (
+                tf.logical_and(tf.equal(state, state_encoder.encode("left_opt")), tf.less(output[0], 0.5)),
+                lambda: state_stack.push(stack, state_encoder.encode("right_opt"), hidden_vector)),
+            (
+                tf.logical_and(tf.equal(state, state_encoder.encode("left_opt")), tf.greater_equal(output[0], 0.5)),
+                lambda: state_stack.push(
+                    state_stack.push(stack, state_encoder.encode("right_opt"), hidden_vector),
+                    state_encoder.encode("value"), hidden_vector)),
+            (
+                tf.logical_and(tf.equal(state, state_encoder.encode("right_opt")), tf.less(output[0], 0.5)),
+                lambda: stack),
+            (
+                tf.logical_and(tf.equal(state, state_encoder.encode("right_opt")), tf.greater_equal(output[0], 0.5)),
+                lambda: state_stack.push(stack, state_encoder.encode("value"), hidden_vector))],
+        default=lambda: stack,
+        exclusive=True)
+
+    # TODO: Is this the best place to do this? Should this function be more abstract?
+    tensor = tf.reshape(tensor, tf.shape(stack[0]))
+
+    return tensor, element_count
 
 
 def tree_to_array(tree: PrimeFactorTree, args) -> [(int, [int])]:
