@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tf_utils
 
 
 class InnerHiddenVectorCreator:
@@ -25,13 +26,13 @@ class LstmInnerHiddenVectorCreator(InnerHiddenVectorCreator):
         with tf.variable_scope("lstm"):
             c, h = tf.split(hidden_vector, 2, axis=0)
 
-            weights_lstm = tf.get_variable(
+            weights_lstm = tf_utils.try_create_scoped_variable(
                 name="weights",
                 shape=[self.hidden_vector_size / 2, self.hidden_vector_size * 2],
                 dtype=tf.float32,
                 initializer=tf.random_normal_initializer())
 
-            biases_lstm = tf.get_variable(
+            biases_lstm = tf_utils.try_create_scoped_variable(
                 name="biases",
                 shape=[self.hidden_vector_size * 2],
                 dtype=tf.float32,
@@ -52,13 +53,13 @@ class LstmInnerHiddenVectorCreator(InnerHiddenVectorCreator):
 
             next_hidden_vector = tf.concat([new_c, new_h], axis=0)
 
-        weights = tf.get_variable(
+        weights = tf_utils.try_create_scoped_variable(
             name="weights",
             shape=[self.hidden_vector_size / 2, num_outputs],
             dtype=tf.float32,
             initializer=tf.random_normal_initializer())
 
-        biases = tf.get_variable(
+        biases = tf_utils.try_create_scoped_variable(
             name="biases",
             shape=[num_outputs],
             dtype=tf.float32,
