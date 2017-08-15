@@ -3,6 +3,7 @@ from . import object_net_writer
 from . import padder
 from . import prime_factors
 import configargparse
+import math
 import random
 import tensorflow as tf
 import tf_utils
@@ -73,6 +74,7 @@ def example():
             generated_outputs_padded, \
             generated_outputs_counts_padded, \
             generated_step_counts, \
+            current_initial_hidden_vector_input, \
             all_summaries = session.run(
                 [
                     object_net_test.cost,
@@ -80,6 +82,7 @@ def example():
                     object_net_test.generated_outputs_padded,
                     object_net_test.generated_outputs_counts_padded,
                     object_net_test.generated_step_counts,
+                    truth_initial_hidden_vector_input,
                     all_summaries],
                 truth_padded_data.get_feed_dict(testing_input))
 
@@ -94,7 +97,10 @@ def example():
                 return prime_factors.PrimeFactorTree(-1, None, None)
 
         generated_trees = [try_array_to_tree(array, args) for array in unpadded]
-        [print(generated_tree) for generated_tree in generated_trees[:10]]
+
+        for tree, number in list(zip(generated_trees, current_initial_hidden_vector_input))[:10]:
+            number = math.pow(math.e, number)
+            print("%f -> %s" % (number, tree))
 
         summary_writer.add_summary(all_summaries, step)
 
