@@ -21,7 +21,7 @@ class LstmInnerHiddenVectorCreator(InnerHiddenVectorCreator):
             inner_hidden_vector: tf.Tensor,
             num_outputs: int) -> (tf.Tensor, tf.Tensor):
 
-        hidden_vector = inner_hidden_vector
+        hidden_vector = tf.add(inner_hidden_vector, parent_hidden_vector) / 2
 
         with tf.variable_scope("lstm"):
             c, h = tf.split(hidden_vector, 2, axis=0)
