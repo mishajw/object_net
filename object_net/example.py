@@ -79,7 +79,10 @@ def example():
 
         show_examples(session, testing_input)
 
-    def show_examples(session, testing_input):
+    def show_examples(session, model_input):
+        # Limit to 10 inputs
+        model_input = [x[:10] for x in model_input]
+
         generated_states_padded, \
             generated_outputs_padded, \
             generated_outputs_counts_padded, \
@@ -91,7 +94,7 @@ def example():
                     object_net_test.generated_outputs_counts_padded,
                     object_net_test.generated_step_counts,
                     truth_initial_hidden_vector_input],
-                truth_padded_data.get_feed_dict(testing_input))
+                truth_padded_data.get_feed_dict(model_input))
 
         copied_testing_input = padder.PaddedData(
             generated_step_counts, generated_outputs_counts_padded, generated_states_padded, generated_outputs_padded)
@@ -105,9 +108,16 @@ def example():
 
         generated_trees = [try_array_to_tree(array, args) for array in unpadded]
 
-        for tree, number in list(zip(generated_trees, current_initial_hidden_vector_input))[:10]:
+        print("Trees:")
+        for tree, number in list(zip(generated_trees, current_initial_hidden_vector_input)):
             number = math.pow(math.e, number)
             print("%d -> %s" % (round(number), tree))
+
+        print("Raw unpadded data:")
+        [print(list(unpadded)) for unpadded in padder.unpad(copied_testing_input)]
+
+        print("Lengths:")
+        print([len(list(unpadded)) for unpadded in padder.unpad(copied_testing_input)])
 
     tf_utils.generic_runner.run_with_test_train_steps(
         args,
