@@ -69,21 +69,28 @@ def example():
         summary_writer.add_summary(all_summaries, step)
 
     def test_step(session, step, testing_input, _, summary_writer, all_summaries):
-        cost_result, \
-            generated_states_padded, \
+        cost_result, all_summaries = session.run(
+            [object_net.cost, all_summaries],
+            truth_padded_data.get_feed_dict(testing_input))
+
+        summary_writer.add_summary(all_summaries, step)
+
+        print("Test cost at step %d: %f" % (step, cost_result))
+
+        show_examples(session, testing_input)
+
+    def show_examples(session, testing_input):
+        generated_states_padded, \
             generated_outputs_padded, \
             generated_outputs_counts_padded, \
             generated_step_counts, \
-            current_initial_hidden_vector_input, \
-            all_summaries = session.run(
+            current_initial_hidden_vector_input = session.run(
                 [
-                    object_net_test.cost,
                     object_net_test.generated_states_padded,
                     object_net_test.generated_outputs_padded,
                     object_net_test.generated_outputs_counts_padded,
                     object_net_test.generated_step_counts,
-                    truth_initial_hidden_vector_input,
-                    all_summaries],
+                    truth_initial_hidden_vector_input],
                 truth_padded_data.get_feed_dict(testing_input))
 
         copied_testing_input = padder.PaddedData(
@@ -100,11 +107,7 @@ def example():
 
         for tree, number in list(zip(generated_trees, current_initial_hidden_vector_input))[:10]:
             number = math.pow(math.e, number)
-            print("%f -> %s" % (number, tree))
-
-        summary_writer.add_summary(all_summaries, step)
-
-        print("Test cost at step %d: %f" % (step, cost_result))
+            print("%d -> %s" % (round(number), tree))
 
     tf_utils.generic_runner.run_with_test_train_steps(
         args,
