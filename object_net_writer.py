@@ -123,10 +123,10 @@ class ObjectNetWriter:
             generated_step_counts_ta
 
     def __step_while_loop(self, step_count: int, states_padded: tf.Tensor, initial_hidden_vector: tf.Tensor):
-        def create_guess_layers(_hidden_vector: tf.Tensor, state_number: int):
+        def create_guess_layers(hidden_vector: tf.Tensor, hidden_vector_summary: tf.Tensor, state_number: int):
             with tf.variable_scope("guess_layers_%d" % state_number):
                 num_outputs = self.state_outputs[state_number]
-                return self.inner_hidden_vector_creator(tf.zeros_like(_hidden_vector), _hidden_vector, num_outputs)
+                return self.inner_hidden_vector_creator(hidden_vector_summary, hidden_vector, num_outputs)
 
         def body(
                 step: int,
@@ -141,7 +141,10 @@ class ObjectNetWriter:
             stack = stack_1, stack_2
 
             # Peek into stack by popping but not updating `stack`
-            state, hidden_vector, _ = state_stack.pop(stack)
+            state, hidden_vector, popped_stack = state_stack.pop(stack)
+
+            # Get the summary for all hidden vectors excluding this one
+            hidden_vector_summary = state_stack.get_hidden_vector_summary(popped_stack)
 
             # Get the number of outputs for padding
             # TODO: Doing this twice, once here, and once when calling create_guess_layers. Fix this
@@ -156,7 +159,7 @@ class ObjectNetWriter:
             next_hidden_vector, current_choice = tf.case(
                 pred_fn_pairs=[(
                     tf.equal(state, i),
-                    lambda i=i: create_guess_layers(hidden_vector, i))
+                    lambda i=i: create_guess_layers(hidden_vector, hidden_vector_summary, i))
                     for i in range(len(self.state_outputs))],
                 default=lambda: (hidden_vector, tf.constant(0, dtype=tf.float32) / tf.constant(0, tf.float32)))
 
