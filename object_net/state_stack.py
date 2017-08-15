@@ -81,7 +81,7 @@ def get_hidden_vector_summary(state_stack: StateStack) -> tf.Tensor:
 
     return tf.cond(
         tf.not_equal(element_count, 0),
-        lambda: tf.reduce_mean(occupied_stack),
+        lambda: tf.reduce_mean(occupied_stack, axis=0),
         lambda: tf.zeros(shape=[get_hidden_vector_size(state_stack)], dtype=tensor.dtype))
 
 
