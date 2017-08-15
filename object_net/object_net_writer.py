@@ -1,7 +1,7 @@
-import object_net_components
-import padder
-import state_stack
-import states
+from . import object_net_components
+from . import padder
+from . import state_stack
+from . import states
 import tensorflow as tf
 import tf_utils
 

@@ -1,5 +1,5 @@
+from . import state_stack
 from typing import Callable
-import state_stack
 import tensorflow as tf
 
 

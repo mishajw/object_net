@@ -79,8 +79,6 @@ def get_hidden_vector_summary(state_stack: StateStack) -> tf.Tensor:
 
     occupied_stack = tf.slice(tensor, [0, 1], [element_count, -1])
 
-    occupied_stack = tf.Print(occupied_stack, [tf.shape(occupied_stack), occupied_stack], "occupied_stack: ", summarize=100)
-
     return tf.cond(
         tf.not_equal(element_count, 0),
         lambda: tf.reduce_mean(occupied_stack),

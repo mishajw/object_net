@@ -1,7 +1,7 @@
+from . import state_stack
+from . import states
 import itertools
 import math
-import state_stack
-import states
 import tensorflow as tf
 import types
 
