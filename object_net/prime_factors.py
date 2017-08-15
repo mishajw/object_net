@@ -45,7 +45,7 @@ class PrimeFactorTree:
             self.right.log()
 
     def pow_e(self):
-        self.value = math.pow(self.value, math.e) if self.value > 0 else -1
+        self.value = math.pow(math.e, self.value) if self.value > 0 else -1
 
         if self.left is not None and self.right is not None:
             self.left.pow_e()
