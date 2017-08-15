@@ -77,16 +77,16 @@ class ObjectNetWriter:
                 batch_outputs_counts_ta: tf.TensorArray,
                 batch_step_counts_ta: tf.TensorArray):
 
-            current_step_count = truth_padded_data.step_counts[step]
-            current_states_padded = truth_padded_data.states_padded[step]
-            current_initial_hidden_vector_input = initial_hidden_vector_input[step]
-
             with tf.variable_scope("initial_hidden_vector"):
                 current_initial_hidden_vector_input = initial_hidden_vector_input[step]
                 current_hidden_vector = tf.fill([self.hidden_vector_size], value=current_initial_hidden_vector_input)
 
             current_states_ta, current_outputs_ta, current_outputs_counts_ta, current_step_count = \
-                self.__step_while_loop(current_step_count, current_states_padded, current_hidden_vector)
+                self.__step_while_loop(
+                    truth_padded_data.step_counts[step],
+                    truth_padded_data.outputs_padded[step],
+                    truth_padded_data.outputs_counts[step],
+                    current_hidden_vector)
 
             return \
                 step + 1, \
@@ -122,7 +122,13 @@ class ObjectNetWriter:
             generated_outputs_counts_padded_ta, \
             generated_step_counts_ta
 
-    def __step_while_loop(self, step_count: int, states_padded: tf.Tensor, initial_hidden_vector: tf.Tensor):
+    def __step_while_loop(
+            self,
+            step_count: int,
+            truth_outputs_padded: tf.Tensor,
+            truth_outputs_counts: tf.Tensor,
+            initial_hidden_vector: tf.Tensor):
+
         def create_guess_layers(hidden_vector: tf.Tensor, hidden_vector_summary: tf.Tensor, state_number: int):
             with tf.variable_scope("guess_layers_%d" % state_number):
                 num_outputs = self.state_outputs[state_number]
@@ -166,16 +172,15 @@ class ObjectNetWriter:
             # Reshape the hidden vector so we know what size it is
             next_hidden_vector = tf.reshape(next_hidden_vector, [self.hidden_vector_size])
 
-            if not self.training:
-                # Push the next state on the stack based on choice output
-                stack = self.update_state_stack_fn(stack, next_hidden_vector, current_choice)
+            if self.training:
+                # If we're training, the choice we send to the update_state_stack_fn should be determined by the truth
+                stack_update_choice = truth_outputs_padded[step][:truth_outputs_counts[step]]
             else:
-                # Check we're not on the last step, and then push the next state on the stack from training data
-                stack = tf.cond(
-                    pred=step < step_count - 1,
-                    fn1=lambda: state_stack.push(
-                        stack, tf.cast(states_padded[step + 1], dtype=tf.float32), next_hidden_vector),
-                    fn2=lambda: stack)
+                # Otherwise, the choice should be what we outputted
+                stack_update_choice = current_choice
+
+            # Update the state stack
+            stack = self.update_state_stack_fn(stack, next_hidden_vector, stack_update_choice)
 
             return \
                 step + 1, \
