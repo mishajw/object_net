@@ -38,7 +38,7 @@ def main():
     with tf.variable_scope("truth_initial_hidden_vector_input"):
         truth_initial_hidden_vector_input = tf.reshape(
             tf.slice(truth_padded_data.outputs_padded, [0, 0, 0], [-1, 1, 1]),
-            [-1, 1])
+            [-1])
 
     def get_object_net_writer(training: bool) -> object_net_writer.ObjectNetWriter:
         return object_net_writer.ObjectNetWriter(
