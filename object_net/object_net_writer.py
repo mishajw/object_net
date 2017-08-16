@@ -17,7 +17,7 @@ class ObjectNetWriter:
             initial_hidden_vector_input: tf.Tensor,
             hidden_vector_size: int,
             fully_connected_sizes: [int],
-            state_outputs: [int],
+            state_output_descriptions: [states.OutputDescription],
             update_state_stack_fn: states.UpdateStateStackFn,
             initial_state: int,
             training: bool,
@@ -29,12 +29,13 @@ class ObjectNetWriter:
         :param initial_hidden_vector_input: the inputs for each example in the batch
         :param hidden_vector_size: size of hidden vectors
         :param fully_connected_sizes: the sizes for fully connected layers
-        :param state_outputs: the respective sizes of outputs for each state
+        :param state_output_descriptions: the respective sizes of outputs for each state
         :param update_state_stack_fn: function that gives transitions between states
         """
         self.hidden_vector_size = hidden_vector_size
         self.fully_connected_sizes = fully_connected_sizes
-        self.state_outputs = [0] + state_outputs
+        self.state_output_descriptions = \
+            [states.OutputDescription(0, states.OutputType.REAL)] + state_output_descriptions
         self.update_state_stack_fn = update_state_stack_fn
         self.initial_state = initial_state
         self.training = training
@@ -131,8 +132,8 @@ class ObjectNetWriter:
 
         def create_guess_layers(hidden_vector: tf.Tensor, hidden_vector_summary: tf.Tensor, state_number: int):
             with tf.variable_scope("guess_layers_%d" % state_number):
-                num_outputs = self.state_outputs[state_number]
-                return self.inner_hidden_vector_creator(hidden_vector_summary, hidden_vector, num_outputs)
+                state_output_description = self.state_output_descriptions[state_number]
+                return self.inner_hidden_vector_creator(hidden_vector_summary, hidden_vector, state_output_description)
 
         def body(
                 step: int,
@@ -157,8 +158,8 @@ class ObjectNetWriter:
             num_outputs = tf.case(
                 pred_fn_pairs=[(
                     tf.equal(state, i),
-                    lambda i=i: tf.constant(self.state_outputs[i]))
-                    for i in range(len(self.state_outputs))],
+                    lambda i=i: tf.constant(self.state_output_descriptions[i].num_outputs))
+                    for i in range(len(self.state_output_descriptions))],
                 default=lambda: tf.constant(0))
 
             # Call `create_guess_layers(...)` depending on what state we're in
@@ -166,7 +167,7 @@ class ObjectNetWriter:
                 pred_fn_pairs=[(
                     tf.equal(state, i),
                     lambda i=i: create_guess_layers(hidden_vector, hidden_vector_summary, i))
-                    for i in range(len(self.state_outputs))],
+                    for i in range(len(self.state_output_descriptions))],
                 default=lambda: (hidden_vector, tf.constant(0, dtype=tf.float32) / tf.constant(0, tf.float32)))
 
             # Reshape the hidden vector so we know what size it is

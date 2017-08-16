@@ -2,6 +2,7 @@ from . import object_net_components
 from . import object_net_writer
 from . import padder
 from . import prime_factors
+from . import states
 import configargparse
 import math
 import random
@@ -47,7 +48,11 @@ def example():
             truth_initial_hidden_vector_input,
             hidden_vector_size=args.hidden_vector_length,
             fully_connected_sizes=tf_utils.int_array_from_str(args.fully_connected_sizes),
-            state_outputs=[1, 3, 1, 1],
+            state_output_descriptions=[
+                states.OutputDescription(1, states.OutputType.REAL),
+                states.OutputDescription(3, states.OutputType.BOOL),
+                states.OutputDescription(1, states.OutputType.BOOL),
+                states.OutputDescription(1, states.OutputType.BOOL)],
             update_state_stack_fn=prime_factors.update_state_stack,
             initial_state=1,
             training=training,
@@ -126,4 +131,3 @@ def example():
         testing_data=(data_holder.get_test_data(), None),
         test_step_fn=test_step,
         train_step_fn=train_step)
-

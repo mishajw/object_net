@@ -1,3 +1,4 @@
+from . import states
 import tensorflow as tf
 import tf_utils
 
@@ -19,7 +20,7 @@ class LstmInnerHiddenVectorCreator(InnerHiddenVectorCreator):
             self,
             parent_hidden_vector: tf.Tensor,
             inner_hidden_vector: tf.Tensor,
-            num_outputs: int) -> (tf.Tensor, tf.Tensor):
+            states_output_description: states.OutputDescription) -> (tf.Tensor, tf.Tensor):
 
         hidden_vector = tf.add(inner_hidden_vector, parent_hidden_vector) / 2
 
@@ -55,17 +56,25 @@ class LstmInnerHiddenVectorCreator(InnerHiddenVectorCreator):
 
         weights = tf_utils.try_create_scoped_variable(
             name="weights",
-            shape=[self.hidden_vector_size / 2, num_outputs],
+            shape=[self.hidden_vector_size / 2, states_output_description.num_outputs],
             dtype=tf.float32,
             initializer=tf.random_normal_initializer())
 
         biases = tf_utils.try_create_scoped_variable(
             name="biases",
-            shape=[num_outputs],
+            shape=[states_output_description.num_outputs],
             dtype=tf.float32,
             initializer=tf.zeros_initializer())
 
         current_choice = tf.squeeze(tf.matmul(tf.expand_dims(new_h, axis=0), weights) + biases, axis=0)
+
+        if states_output_description.output_type == states.OutputType.BOOL:
+            current_choice = tf.sigmoid(current_choice)
+        elif states_output_description.output_type == states.OutputType.SIGNED:
+            current_choice = tf.tanh(current_choice)
+        elif states_output_description.output_type == states.OutputType.REAL:
+            # Output is already in the range of real numbers
+            pass
 
         return next_hidden_vector, current_choice
 

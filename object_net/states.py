@@ -1,4 +1,5 @@
 from . import state_stack
+from enum import Enum
 from typing import Callable
 import tensorflow as tf
 
@@ -38,3 +39,20 @@ class StateEncoder:
             return StateEncoder.end_state_string
 
         return self.state_strings[state_int + 1]
+
+
+class OutputType(Enum):
+    BOOL = 0
+    """Output in the range 0 to 1 where `< 0.5` is false and `>= 0.5` is true"""
+
+    SIGNED = 1
+    """Output in the range -1 to 1"""
+
+    REAL = 2
+    """Output in the range negative infinity to infinity"""
+
+
+class OutputDescription:
+    def __init__(self, num_outputs: int, output_type: OutputType):
+        self.num_outputs = num_outputs
+        self.output_type = output_type
