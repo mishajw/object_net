@@ -131,9 +131,9 @@ class ObjectNetWriter:
             initial_hidden_vector: tf.Tensor):
 
         def create_guess_layers(hidden_vector: tf.Tensor, hidden_vector_summary: tf.Tensor, state_number: int):
-            with tf.variable_scope("guess_layers_%d" % state_number):
-                state_output_description = self.state_output_descriptions[state_number]
-                return self.inner_hidden_vector_creator(hidden_vector_summary, hidden_vector, state_output_description)
+            state_output_description = self.state_output_descriptions[state_number]
+            return self.inner_hidden_vector_creator(
+                hidden_vector_summary, hidden_vector, state_output_description, state_number)
 
         def body(
                 step: int,
