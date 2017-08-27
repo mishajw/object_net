@@ -96,7 +96,7 @@ def get_max_size(state_stack: StateStack):
     return tf.shape(tensor)[0]
 
 
-def get_hidden_vector_size(state_stack: StateStack):
+def get_hidden_vector_size(state_stack: StateStack) -> int:
     """
     Get the size of hidden vectors that can be placed into the stack
     :param state_stack: the stack to check
@@ -104,4 +104,4 @@ def get_hidden_vector_size(state_stack: StateStack):
     """
     tensor, _ = state_stack
 
-    return tf.shape(tensor)[1] - 1
+    return tensor.get_shape().as_list()[1] - 1
