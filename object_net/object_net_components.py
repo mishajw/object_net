@@ -3,30 +3,58 @@ import tensorflow as tf
 import tf_utils
 
 
-class InnerHiddenVectorCreator:
+class HiddenVectorCombiner:
     def __call__(
             self,
             parent_hidden_vector: tf.Tensor,
-            inner_hidden_vector: tf.Tensor,
-            states_output_description: states.OutputDescription,
-            state: int) -> (tf.Tensor, tf.Tensor):
+            child_hidden_vector: tf.Tensor,
+            inner_hidden_vector: tf.Tensor) -> tf.Tensor:
         pass
 
 
-class LstmInnerHiddenVectorCreator(InnerHiddenVectorCreator):
-    def __init__(self, hidden_vector_size: int, num_layers: int):
+class AdditionHiddenVectorCombiner(HiddenVectorCombiner):
+    def __call__(
+            self,
+            parent_hidden_vector: tf.Tensor,
+            child_hidden_vector: tf.Tensor,
+            inner_hidden_vector: tf.Tensor) -> tf.Tensor:
+
+        all_hidden_vectors = tf.cond(
+            pred=tf.reduce_any(tf.is_nan(child_hidden_vector)),
+            fn1=lambda: tf.concat([[parent_hidden_vector], [inner_hidden_vector]], axis=0),
+            fn2=lambda: tf.concat([[parent_hidden_vector], [child_hidden_vector], [inner_hidden_vector]], axis=0))
+
+        return tf.reduce_sum(all_hidden_vectors, axis=0)
+
+
+class HiddenVectorNetwork:
+    def __call__(
+            self,
+            parent_hidden_vector: tf.Tensor,
+            child_hidden_vector: tf.Tensor,
+            inner_hidden_vector: tf.Tensor,
+            states_output_description: states.OutputDescription,
+            state: int) -> (tf.Tensor, tf.Tensor):
+        raise NotImplementedError()
+
+
+class LstmHiddenVectorNetwork(HiddenVectorNetwork):
+    def __init__(self, hidden_vector_size: int, num_layers: int, hidden_vector_combiner: HiddenVectorCombiner):
         self.num_layers = num_layers
         self.total_hidden_vector_size = hidden_vector_size
         self.layer_hidden_vector_size = self.total_hidden_vector_size / self.num_layers
+        self.hidden_vector_combiner = hidden_vector_combiner
 
     def __call__(
             self,
             parent_hidden_vector: tf.Tensor,
+            child_hidden_vector: tf.Tensor,
             inner_hidden_vector: tf.Tensor,
             states_output_description: states.OutputDescription,
             state: int) -> (tf.Tensor, tf.Tensor):
 
-        total_hidden_vector = tf.add(inner_hidden_vector, parent_hidden_vector) / 2
+        total_hidden_vector = self.hidden_vector_combiner(
+            parent_hidden_vector, child_hidden_vector, inner_hidden_vector)
 
         layer_hidden_vectors = tf.split(total_hidden_vector, self.num_layers)
 
@@ -98,21 +126,3 @@ class LstmInnerHiddenVectorCreator(InnerHiddenVectorCreator):
         new_h = tf.multiply(output_gate, tf.tanh(c_in))
 
         return new_c, new_h
-
-
-class ChildHiddenVectorCombiner:
-    def __call__(
-            self,
-            parent_hidden_vector: tf.Tensor,
-            inner_hidden_vector: tf.Tensor,
-            child_hidden_vector: tf.Tensor) -> tf.Tensor:
-        pass
-
-
-class AdditionChildHiddenVectorCombiner(ChildHiddenVectorCombiner):
-    def __call__(
-            self,
-            parent_hidden_vector: tf.Tensor,
-            inner_hidden_vector: tf.Tensor,
-            child_hidden_vector: tf.Tensor) -> tf.Tensor:
-        return tf.add(inner_hidden_vector, child_hidden_vector)

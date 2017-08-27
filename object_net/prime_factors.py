@@ -68,12 +68,14 @@ def get_trees(args) -> [PrimeFactorTree]:
 
 
 def update_state_stack(
-        stack: state_stack.StateStack, hidden_vector: tf.Tensor, output: tf.Tensor) -> state_stack.StateStack:
+        stack: state_stack.StateStack,
+        hidden_vector: tf.Tensor,
+        output: tf.Tensor) -> (state_stack.StateStack, tf.Tensor):
 
-    state, _, stack = state_stack.pop(stack)
+    state, popped_hidden_vector, stack = state_stack.pop(stack)
 
-    def create_nans():
-        return tf.constant(np.nan, dtype=tf.float32, shape=[state_stack.get_hidden_vector_size(stack)])
+    def get_should_return_value(_state):
+        return tf.constant(_state is not None)
 
     def create_pred(start_state: str, other_preds: tf.Tensor=None) -> tf.Tensor:
         state_pred = tf.equal(state, state_encoder.encode(start_state))
@@ -93,7 +95,7 @@ def update_state_stack(
 
         return \
             create_pred(start_state, other_preds), \
-            lambda: (*new_stack, create_nans())
+            lambda: (*new_stack, get_should_return_value(next_state))
 
     def create_new_object_transition_pred_fn(
             start_state: str, next_child_state: str, next_state: str=None, other_preds: tf.Tensor=None):
@@ -106,11 +108,11 @@ def update_state_stack(
 
             new_stack = state_stack.push(new_stack, state_encoder.encode(next_child_state), hidden_vector)
 
-            return (*new_stack, create_nans())
+            return (*new_stack, get_should_return_value(next_state))
 
         return create_pred(start_state, other_preds), fn
 
-    tensor, element_count, return_value = tf.case(
+    tensor, element_count, should_return_value = tf.case(
         pred_fn_pairs=[
             create_transition_pred_fn("value", "mod_three"),
             create_transition_pred_fn("mod_three", "left_opt"),
@@ -119,13 +121,21 @@ def update_state_stack(
             create_new_object_transition_pred_fn("right_opt", "value", other_preds=tf.greater_equal(output[0], 0.5)),
             create_transition_pred_fn("right_opt", other_preds=tf.less(output[0], 0.5))
         ],
-        default=lambda: (*stack, create_nans()),
+        default=lambda: (*stack, get_should_return_value(None)),
         exclusive=True)
 
     # TODO: Is this the best place to do this? Should this function be more abstract?
     tensor = tf.reshape(tensor, tf.shape(stack[0]))
 
-    return tensor, element_count
+    return_value = tf.cond(
+        should_return_value,
+        # The return value is the popped hidden vector
+        lambda: popped_hidden_vector,
+        # Else return a `tf.Tensor` of NaNs
+        # TODO: Check for other ways of representing the absence of a `tf.Tensor`
+        lambda: tf.constant(np.nan, dtype=tf.float32, shape=[state_stack.get_hidden_vector_size(stack)]))
+
+    return (tensor, element_count), return_value
 
 
 def tree_to_array(tree: PrimeFactorTree, args) -> [(int, [int])]:

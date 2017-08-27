@@ -2,6 +2,7 @@ from . import object_net_components
 from . import padder
 from . import state_stack
 from . import states
+import numpy as np
 import tensorflow as tf
 import tf_utils
 
@@ -21,8 +22,7 @@ class ObjectNetWriter:
             update_state_stack_fn: states.UpdateStateStackFn,
             initial_state: int,
             training: bool,
-            inner_hidden_vector_creator: object_net_components.InnerHiddenVectorCreator,
-            child_hidden_vector_combiner: object_net_components.ChildHiddenVectorCombiner):
+            hidden_vector_network: object_net_components.HiddenVectorNetwork):
         """
         Initialise TensorFlow graph
         :param truth_padded_data: the input data
@@ -39,8 +39,7 @@ class ObjectNetWriter:
         self.update_state_stack_fn = update_state_stack_fn
         self.initial_state = initial_state
         self.training = training
-        self.inner_hidden_vector_creator = inner_hidden_vector_creator
-        self.child_hidden_vector_combiner = child_hidden_vector_combiner
+        self.hidden_vector_network = hidden_vector_network
 
         self.max_steps = tf.shape(truth_padded_data.states_padded)[1]
 
@@ -130,10 +129,14 @@ class ObjectNetWriter:
             truth_outputs_counts: tf.Tensor,
             initial_hidden_vector: tf.Tensor):
 
-        def create_guess_layers(hidden_vector: tf.Tensor, hidden_vector_summary: tf.Tensor, state_number: int):
+        def create_guess_layers(
+                parent_hidden_vector: tf.Tensor,
+                child_hidden_vector: tf.Tensor,
+                inner_hidden_vector: tf.Tensor,
+                state_number: int):
             state_output_description = self.state_output_descriptions[state_number]
-            return self.inner_hidden_vector_creator(
-                hidden_vector_summary, hidden_vector, state_output_description, state_number)
+            return self.hidden_vector_network(
+                parent_hidden_vector, child_hidden_vector, inner_hidden_vector, state_output_description, state_number)
 
         def body(
                 step: int,
@@ -141,7 +144,8 @@ class ObjectNetWriter:
                 stack_2,
                 states_ta: tf.TensorArray,
                 outputs_ta: tf.TensorArray,
-                outputs_counts_ta: tf.TensorArray):
+                outputs_counts_ta: tf.TensorArray,
+                return_value: tf.Tensor):
 
             # Rebuild `stack` tuple
             # TODO: Find way to avoid this by putting tuples into `tf.while_loop` arguments
@@ -166,7 +170,7 @@ class ObjectNetWriter:
             next_hidden_vector, current_choice = tf.case(
                 pred_fn_pairs=[(
                     tf.equal(state, i),
-                    lambda i=i: create_guess_layers(hidden_vector, hidden_vector_summary, i))
+                    lambda i=i: create_guess_layers(hidden_vector_summary, return_value, hidden_vector, i))
                     for i in range(len(self.state_output_descriptions))],
                 default=lambda: (hidden_vector, tf.constant(0, dtype=tf.float32) / tf.constant(0, tf.float32)))
 
@@ -181,14 +185,15 @@ class ObjectNetWriter:
                 stack_update_choice = current_choice
 
             # Update the state stack
-            stack = self.update_state_stack_fn(stack, next_hidden_vector, stack_update_choice)
+            stack, return_value = self.update_state_stack_fn(stack, next_hidden_vector, stack_update_choice)
 
             return \
                 step + 1, \
                 (*stack), \
                 states_ta.write(step, state), \
                 outputs_ta.write(step, current_choice), \
-                outputs_counts_ta.write(step, num_outputs)
+                outputs_counts_ta.write(step, num_outputs), \
+                return_value
 
         def cond(step, stack_1, stack_2, *_):
             # Rebuild `stack` tuple
@@ -211,17 +216,26 @@ class ObjectNetWriter:
         initial_outputs_counts_ta = tf.TensorArray(
             dtype=tf.int32, size=step_count if self.training else self.max_steps, name="initial_outputs_counts_ta")
 
-        final_step, *_, final_states_ta, final_outputs_ta, final_outputs_counts_ta = tf.while_loop(
+        initial_return_value = tf.constant(np.nan, dtype=tf.float32, shape=[self.hidden_vector_size])
+
+        final_step, *_, final_states_ta, final_outputs_ta, final_outputs_counts_ta, _ = tf.while_loop(
             cond=cond,
             body=body,
-            loop_vars=[0, *initial_stack, initial_states_ta, initial_outputs_ta, initial_outputs_counts_ta],
+            loop_vars=[
+                0,
+                *initial_stack,
+                initial_states_ta,
+                initial_outputs_ta,
+                initial_outputs_counts_ta,
+                initial_return_value],
             shape_invariants=[
                 tf.TensorShape([]),
                 tf.TensorShape([None, self.hidden_vector_size + 1]),
                 tf.TensorShape([]),
                 tf.TensorShape(None),
                 tf.TensorShape(None),
-                tf.TensorShape(None)],
+                tf.TensorShape(None),
+                tf.TensorShape([self.hidden_vector_size])],
             name="step_while_loop")
 
         # If in test mode, we don't know the amount of steps we will execute. So we need to resize the `tf.TensorArray`

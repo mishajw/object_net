@@ -56,9 +56,10 @@ def example():
             update_state_stack_fn=prime_factors.update_state_stack,
             initial_state=1,
             training=training,
-            inner_hidden_vector_creator=object_net_components.LstmInnerHiddenVectorCreator(
-                args.hidden_vector_length, num_layers=4),
-            child_hidden_vector_combiner=object_net_components.AdditionChildHiddenVectorCombiner())
+            hidden_vector_network=object_net_components.LstmHiddenVectorNetwork(
+                args.hidden_vector_length,
+                num_layers=4,
+                hidden_vector_combiner=object_net_components.AdditionHiddenVectorCombiner()))
 
     object_net = get_object_net_writer(training=True)
     object_net_test = get_object_net_writer(training=False)

@@ -1,14 +1,14 @@
 from . import state_stack
 from enum import Enum
-from typing import Callable
+from typing import Callable, Tuple
 import tensorflow as tf
 
 
-UpdateStateStackFn = Callable[[state_stack.StateStack, tf.Tensor, tf.Tensor], state_stack.StateStack]
+UpdateStateStackFn = Callable[[state_stack.StateStack, tf.Tensor, tf.Tensor], Tuple[state_stack.StateStack, tf.Tensor]]
 """
 Type for functions that give transitions between states by modifying a state stack
 The function takes the current state stack, the current hidden vector, and the output from the current choice
-The function returns the new state stack
+The function returns the new state stack, and optionally the return value of the child created
 """
 
 
