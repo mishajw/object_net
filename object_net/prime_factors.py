@@ -2,6 +2,7 @@ from . import state_stack
 from . import states
 import itertools
 import math
+import numpy as np
 import tensorflow as tf
 import types
 
@@ -70,31 +71,55 @@ def update_state_stack(
         stack: state_stack.StateStack, hidden_vector: tf.Tensor, output: tf.Tensor) -> state_stack.StateStack:
 
     state, _, stack = state_stack.pop(stack)
-    tf.reshape(state, [])
 
-    tensor, element_count = tf.case(
+    def create_nans():
+        return tf.constant(np.nan, dtype=tf.float32, shape=[state_stack.get_hidden_vector_size(stack)])
+
+    def create_pred(start_state: str, other_preds: tf.Tensor=None) -> tf.Tensor:
+        state_pred = tf.equal(state, state_encoder.encode(start_state))
+
+        if other_preds is None:
+            return state_pred
+        elif other_preds.get_shape().ndims == 0:
+            return tf.logical_and(state_pred, other_preds)
+        else:
+            return tf.logical_and(state_pred, tf.reduce_all(other_preds))
+
+    def create_transition_pred_fn(start_state: str, next_state: str=None, other_preds: tf.Tensor=None):
+        new_stack = stack
+
+        if next_state is not None:
+            new_stack = state_stack.push(new_stack, state_encoder.encode(next_state), hidden_vector)
+
+        return \
+            create_pred(start_state, other_preds), \
+            lambda: (*new_stack, create_nans())
+
+    def create_new_object_transition_pred_fn(
+            start_state: str, next_child_state: str, next_state: str=None, other_preds: tf.Tensor=None):
+
+        def fn():
+            new_stack = stack
+
+            if next_state is not None:
+                new_stack = state_stack.push(new_stack, state_encoder.encode(next_state), hidden_vector)
+
+            new_stack = state_stack.push(new_stack, state_encoder.encode(next_child_state), hidden_vector)
+
+            return (*new_stack, create_nans())
+
+        return create_pred(start_state, other_preds), fn
+
+    tensor, element_count, return_value = tf.case(
         pred_fn_pairs=[
-            (
-                tf.equal(state, state_encoder.encode("value")),
-                lambda: state_stack.push(stack, state_encoder.encode("mod_three"), hidden_vector)),
-            (
-                tf.equal(state, state_encoder.encode("mod_three")),
-                lambda: state_stack.push(stack, state_encoder.encode("left_opt"), hidden_vector)),
-            (
-                tf.logical_and(tf.equal(state, state_encoder.encode("left_opt")), tf.less(output[0], 0.5)),
-                lambda: state_stack.push(stack, state_encoder.encode("right_opt"), hidden_vector)),
-            (
-                tf.logical_and(tf.equal(state, state_encoder.encode("left_opt")), tf.greater_equal(output[0], 0.5)),
-                lambda: state_stack.push(
-                    state_stack.push(stack, state_encoder.encode("right_opt"), hidden_vector),
-                    state_encoder.encode("value"), hidden_vector)),
-            (
-                tf.logical_and(tf.equal(state, state_encoder.encode("right_opt")), tf.less(output[0], 0.5)),
-                lambda: stack),
-            (
-                tf.logical_and(tf.equal(state, state_encoder.encode("right_opt")), tf.greater_equal(output[0], 0.5)),
-                lambda: state_stack.push(stack, state_encoder.encode("value"), hidden_vector))],
-        default=lambda: stack,
+            create_transition_pred_fn("value", "mod_three"),
+            create_transition_pred_fn("mod_three", "left_opt"),
+            create_new_object_transition_pred_fn("left_opt", "value", "right_opt", other_preds=tf.greater_equal(output[0], 0.5)),
+            create_transition_pred_fn("left_opt", "right_opt", other_preds=tf.less(output[0], 0.5)),
+            create_new_object_transition_pred_fn("right_opt", "value", other_preds=tf.greater_equal(output[0], 0.5)),
+            create_transition_pred_fn("right_opt", other_preds=tf.less(output[0], 0.5))
+        ],
+        default=lambda: (*stack, create_nans()),
         exclusive=True)
 
     # TODO: Is this the best place to do this? Should this function be more abstract?
