@@ -17,7 +17,6 @@ class ObjectNetWriter:
             truth_padded_data: padder.PlaceholderPaddedData,
             initial_hidden_vector_input: tf.Tensor,
             hidden_vector_size: int,
-            fully_connected_sizes: [int],
             state_output_descriptions: [states.OutputDescription],
             update_state_stack_fn: states.UpdateStateStackFn,
             initial_state: int,
@@ -28,12 +27,10 @@ class ObjectNetWriter:
         :param truth_padded_data: the input data
         :param initial_hidden_vector_input: the inputs for each example in the batch
         :param hidden_vector_size: size of hidden vectors
-        :param fully_connected_sizes: the sizes for fully connected layers
         :param state_output_descriptions: the respective sizes of outputs for each state
         :param update_state_stack_fn: function that gives transitions between states
         """
         self.hidden_vector_size = hidden_vector_size
-        self.fully_connected_sizes = fully_connected_sizes
         self.state_output_descriptions = \
             [states.OutputDescription(0, states.OutputType.REAL)] + state_output_descriptions
         self.update_state_stack_fn = update_state_stack_fn

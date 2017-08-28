@@ -47,7 +47,6 @@ def example():
             truth_padded_data,
             truth_initial_hidden_vector_input,
             hidden_vector_size=args.hidden_vector_length,
-            fully_connected_sizes=tf_utils.int_array_from_str(args.fully_connected_sizes),
             state_output_descriptions=[
                 states.OutputDescription(1, states.OutputType.REAL),
                 states.OutputDescription(3, states.OutputType.BOOL),
