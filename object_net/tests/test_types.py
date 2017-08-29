@@ -1,4 +1,4 @@
-from object_net.object import types
+from object_net import types
 import unittest
 
 
