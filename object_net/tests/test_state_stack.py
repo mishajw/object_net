@@ -105,8 +105,7 @@ class TestStateStack(unittest.TestCase):
         stack = state_stack.create(max_size=10, hidden_vector_size=4)
         hidden_vector_size = state_stack.get_hidden_vector_size(stack)
 
-        with tf.Session() as sess:
-            self.assertEqual(sess.run(hidden_vector_size), 4)
+        self.assertEqual(hidden_vector_size, 4)
 
 
 if __name__ == "__main__":
