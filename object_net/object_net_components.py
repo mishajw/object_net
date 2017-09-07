@@ -33,8 +33,7 @@ class HiddenVectorNetwork:
             parent_hidden_vector: tf.Tensor,
             child_hidden_vector: tf.Tensor,
             inner_hidden_vector: tf.Tensor,
-            states_output_description: states.OutputDescription,
-            state: int) -> (tf.Tensor, tf.Tensor):
+            state: states.State) -> (tf.Tensor, tf.Tensor):
         raise NotImplementedError()
 
 
@@ -50,8 +49,7 @@ class LstmHiddenVectorNetwork(HiddenVectorNetwork):
             parent_hidden_vector: tf.Tensor,
             child_hidden_vector: tf.Tensor,
             inner_hidden_vector: tf.Tensor,
-            states_output_description: states.OutputDescription,
-            state: int) -> (tf.Tensor, tf.Tensor):
+            state: states.State) -> (tf.Tensor, tf.Tensor):
 
         total_hidden_vector = self.hidden_vector_combiner(
             parent_hidden_vector, child_hidden_vector, inner_hidden_vector)
@@ -74,23 +72,23 @@ class LstmHiddenVectorNetwork(HiddenVectorNetwork):
         with tf.variable_scope("make_choice_%d" % state):
             weights = tf_utils.try_create_scoped_variable(
                 name="weights",
-                shape=[self.layer_hidden_vector_size / 2, states_output_description.num_outputs],
+                shape=[self.layer_hidden_vector_size / 2, state.num_outputs],
                 dtype=tf.float32,
                 initializer=tf.random_normal_initializer())
 
             biases = tf_utils.try_create_scoped_variable(
                 name="biases",
-                shape=[states_output_description.num_outputs],
+                shape=[state.num_outputs],
                 dtype=tf.float32,
                 initializer=tf.zeros_initializer())
 
             current_choice = tf.squeeze(tf.matmul(tf.expand_dims(current_input, axis=0), weights) + biases, axis=0)
 
-            if states_output_description.output_type == states.OutputType.BOOL:
+            if state.output_type == states.OutputType.BOOL:
                 current_choice = tf.sigmoid(current_choice)
-            elif states_output_description.output_type == states.OutputType.SIGNED:
+            elif state.output_type == states.OutputType.SIGNED:
                 current_choice = tf.tanh(current_choice)
-            elif states_output_description.output_type == states.OutputType.REAL:
+            elif state.output_type == states.OutputType.REAL:
                 # Output is already in the range of real numbers
                 pass
 

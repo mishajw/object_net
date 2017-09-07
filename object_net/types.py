@@ -1,6 +1,8 @@
-import json
+from . import states, state_transition
 from typing import Dict, List, Any
 from typing import Type as TypingType
+import json
+import tensorflow as tf
 
 
 def assert_string_exists(json_object, name: str):
@@ -17,6 +19,11 @@ def assert_string_list_exists(json_object: dict, name: str):
 class Type:
     def __init__(self, name: str):
         self.name = name
+        self.states = self.__get_states()
+        self.state_transitions = self.__get_state_transitions()
+
+        assert len(self.states) > 0
+        self.initial_state = self.states[0]
 
     @classmethod
     def from_json(cls, json_object):
@@ -29,12 +36,26 @@ class Type:
     def resolve_references(self, type_dict):
         pass
 
+    def get_state_by_name(self, state_name: str):
+        for state in self.states:
+            if state.name == state_name:
+                return state
+
+        raise ValueError("Can't find state in type %s with name %s" % (self, state_name))
+
+    def __get_states(self) -> List[states.State]:
+        raise NotImplementedError()
+
+    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+        raise NotImplementedError()
+
 
 TypeDict = Dict[str, Type]
 
 
 class PrimitiveType(Type):
-    def __init__(self, name: str, primitive: TypingType):
+    def __init__(self, name: str, primitive: TypingType, num_outputs: int, output_type: states.OutputType):
+        self.state = states.State(name, num_outputs, output_type)
         super().__init__(name)
         self.primitive = primitive
 
@@ -44,6 +65,12 @@ class PrimitiveType(Type):
 
     def validate(self, value):
         assert isinstance(value, self.primitive)
+
+    def __get_states(self) -> List[states.State]:
+        return [self.state]
+
+    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+        return []
 
 
 class EnumType(Type):
@@ -60,6 +87,12 @@ class EnumType(Type):
 
     def validate(self, value):
         assert any([value == option for option in self.options])
+
+    def __get_states(self) -> List[states.State]:
+        return [states.State(self.name, len(self.options), states.OutputType.BOOL)]
+
+    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+        return []
 
 
 class UnionType(Type):
@@ -85,6 +118,17 @@ class UnionType(Type):
                 else:
                     raise UnknownReferenceError()
 
+    def __get_states(self) -> List[states.State]:
+        return [states.State(self.name, len(self.types), states.OutputType.BOOL)]
+
+    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+        return [
+            state_transition.ChildStateTransition(
+                self.initial_state,
+                _type.initial_state,
+                other_preds_fn=lambda output: tf.equal(tf.argmax(output), i))
+            for i, _type in enumerate(self.types)]
+
 
 class OptionalType(Type):
     def __init__(self, _type: Type):
@@ -107,6 +151,19 @@ class OptionalType(Type):
                 self.type = type_dict[self.type.name]
             else:
                 raise UnknownReferenceError()
+
+    def __get_states(self) -> List[states.State]:
+        return [states.State(self.name, 1, states.OutputType.BOOL)]
+
+    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+        return [
+            state_transition.ChildStateTransition(
+                self.initial_state,
+                self.type.initial_state,
+                other_preds_fn=lambda output: tf.greater_equal(output[0], 0.5)),
+            state_transition.InnerStateTransition(
+                self.initial_state,
+                other_preds_fn=lambda output: tf.less(output[0], 0.5))]
 
 
 class ObjectType(Type):
@@ -139,6 +196,20 @@ class ObjectType(Type):
                 else:
                     raise UnknownReferenceError()
 
+    def __get_states(self) -> List[states.State]:
+        return []
+
+    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+        fields_list = list(self.fields)
+
+        for i in range(len(self.fields.keys()) - 1):
+            current_field_name = fields_list[i]
+            next_field_name = fields_list[i + 1]
+
+            yield state_transition.InnerStateTransition(
+                self.fields[current_field_name].initial_state,
+                self.fields[next_field_name].initial_state)
+
 
 class ReferenceType(Type):
     def __init__(self, name: str):
@@ -154,6 +225,12 @@ class ReferenceType(Type):
     def resolve_references(self, type_dict: TypeDict):
         raise TypeError("Can't resolve references on a reference type")
 
+    def __get_states(self) -> List[states.State]:
+        return []
+
+    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+        return []
+
 
 class UnknownReferenceError(RuntimeError):
     pass
@@ -167,9 +244,9 @@ class Instance:
         self.type = _type
 
 
-int_type = PrimitiveType("int", int)
-float_type = PrimitiveType("float", float)
-bool_type = PrimitiveType("bool", bool)
+int_type = PrimitiveType("int", int, num_outputs=0, output_type=states.OutputType.REAL)
+float_type = PrimitiveType("float", float, num_outputs=0, output_type=states.OutputType.REAL)
+bool_type = PrimitiveType("bool", bool, num_outputs=0, output_type=states.OutputType.REAL)
 
 
 def resolve_references(types: List[Type]):
