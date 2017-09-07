@@ -32,9 +32,27 @@ class Type:
     def validate(self, value):
         raise NotImplementedError()
 
+    def get_child_keys(self) -> iter:
+        """
+        :return: an iterator that gives keys to be used for accessing children types
+        """
+        return []
+
+    def get_child_type(self, key) -> "Type":
+        raise ValueError("No children")
+
+    def set_child_type(self, key, value):
+        raise ValueError("No children")
+
     # TODO: Look into having polymorphic child setters and getters so this doesn't need to be implemented for all types
     def resolve_references(self, type_dict):
-        pass
+        for key in self.get_child_keys():
+            child_type = self.get_child_type(key)
+            if isinstance(child_type, ReferenceType):
+                if child_type.name in type_dict.keys():
+                    self.set_child_type(key, type_dict[child_type.name])
+                else:
+                    raise UnknownReferenceError()
 
     def get_state_by_name(self, state_name: str):
         for state in self.states:
@@ -110,13 +128,14 @@ class UnionType(Type):
     def validate(self, value):
         assert [_type.validate(value) for _type in self.types]
 
-    def resolve_references(self, type_dict: TypeDict):
-        for i, _type in enumerate(self.types):
-            if isinstance(_type, ReferenceType):
-                if _type.name in type_dict.keys():
-                    self.types[i] = type_dict[_type.name]
-                else:
-                    raise UnknownReferenceError()
+    def get_child_keys(self) -> iter:
+        return range(len(self.types))
+
+    def get_child_type(self, key) -> "Type":
+        return self.types[key]
+
+    def set_child_type(self, key, value):
+        self.types[key] = value
 
     def __get_states(self) -> List[states.State]:
         return [states.State(self.name, len(self.types), states.OutputType.BOOL)]
@@ -145,12 +164,16 @@ class OptionalType(Type):
         if value is not None:
             self.type.validate(value)
 
-    def resolve_references(self, type_dict: TypeDict):
-        if isinstance(self.type, ReferenceType):
-            if self.type.name in type_dict.keys():
-                self.type = type_dict[self.type.name]
-            else:
-                raise UnknownReferenceError()
+    def get_child_keys(self) -> iter:
+        return [None]
+
+    def get_child_type(self, key) -> "Type":
+        assert key is None
+        return self.type
+
+    def set_child_type(self, key, value):
+        assert key is None
+        self.type = value
 
     def __get_states(self) -> List[states.State]:
         return [states.State(self.name, 1, states.OutputType.BOOL)]
@@ -186,6 +209,15 @@ class ObjectType(Type):
         for field_name in value:
             assert field_name in self.fields.keys()
             self.fields[field_name].validate(value[field_name])
+
+    def get_child_keys(self) -> iter:
+        return self.fields.keys()
+
+    def get_child_type(self, key) -> "Type":
+        return self.fields[key]
+
+    def set_child_type(self, key, value):
+        self.fields[key] = value
 
     def resolve_references(self, type_dict: TypeDict):
         for key in self.fields.keys():
@@ -224,6 +256,12 @@ class ReferenceType(Type):
 
     def resolve_references(self, type_dict: TypeDict):
         raise TypeError("Can't resolve references on a reference type")
+
+    def get_child_type(self, key) -> "Type":
+        raise TypeError("Can't get child type on a reference type")
+
+    def set_child_type(self, key, value):
+        raise TypeError("Can't set child type on a reference type")
 
     def __get_states(self) -> List[states.State]:
         return []
