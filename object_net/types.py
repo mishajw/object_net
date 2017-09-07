@@ -17,13 +17,14 @@ def assert_string_list_exists(json_object: dict, name: str):
 
 
 class Type:
-    def __init__(self, name: str):
+    def __init__(self, name: str, _states: List[states.State]):
         self.name = name
-        self.states = self.__get_states()
-        self.state_transitions = self.__get_state_transitions()
+        self.states = _states
 
-        assert len(self.states) > 0
-        self.initial_state = self.states[0]
+        if len(self.states) > 0:
+            self.initial_state = self.states[0]
+        else:
+            self.initial_state = None
 
     @classmethod
     def from_json(cls, json_object):
@@ -61,9 +62,6 @@ class Type:
 
         raise ValueError("Can't find state in type %s with name %s" % (self, state_name))
 
-    def __get_states(self) -> List[states.State]:
-        raise NotImplementedError()
-
     def __get_state_transitions(self) -> List[state_transition.StateTransition]:
         raise NotImplementedError()
 
@@ -73,8 +71,7 @@ TypeDict = Dict[str, Type]
 
 class PrimitiveType(Type):
     def __init__(self, name: str, primitive: TypingType, num_outputs: int, output_type: states.OutputType):
-        self.state = states.State(name, num_outputs, output_type)
-        super().__init__(name)
+        super().__init__(name, [states.State(name, num_outputs, output_type)])
         self.primitive = primitive
 
     @classmethod
@@ -84,16 +81,13 @@ class PrimitiveType(Type):
     def validate(self, value):
         assert isinstance(value, self.primitive)
 
-    def __get_states(self) -> List[states.State]:
-        return [self.state]
-
     def __get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
 
 class EnumType(Type):
     def __init__(self, name: str, options: List[str]):
-        super().__init__(name)
+        super().__init__(name, [states.State(name, len(options), states.OutputType.BOOL)])
         self.options = options
 
     @classmethod
@@ -106,16 +100,13 @@ class EnumType(Type):
     def validate(self, value):
         assert any([value == option for option in self.options])
 
-    def __get_states(self) -> List[states.State]:
-        return [states.State(self.name, len(self.options), states.OutputType.BOOL)]
-
     def __get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
 
 class UnionType(Type):
     def __init__(self, name: str, types: List[Type]):
-        super().__init__(name)
+        super().__init__(name, [states.State(name, len(types), states.OutputType.BOOL)])
         self.types = types
 
     @classmethod
@@ -137,9 +128,6 @@ class UnionType(Type):
     def set_child_type(self, key, value):
         self.types[key] = value
 
-    def __get_states(self) -> List[states.State]:
-        return [states.State(self.name, len(self.types), states.OutputType.BOOL)]
-
     def __get_state_transitions(self) -> List[state_transition.StateTransition]:
         return [
             state_transition.ChildStateTransition(
@@ -151,7 +139,8 @@ class UnionType(Type):
 
 class OptionalType(Type):
     def __init__(self, _type: Type):
-        super().__init__("optional[%s]" % _type.name)
+        name = "optional[%s]" % _type.name
+        super().__init__(name, [states.State(name, 1, states.OutputType.BOOL)])
         self.type = _type
 
     @classmethod
@@ -175,9 +164,6 @@ class OptionalType(Type):
         assert key is None
         self.type = value
 
-    def __get_states(self) -> List[states.State]:
-        return [states.State(self.name, 1, states.OutputType.BOOL)]
-
     def __get_state_transitions(self) -> List[state_transition.StateTransition]:
         return [
             state_transition.ChildStateTransition(
@@ -191,7 +177,7 @@ class OptionalType(Type):
 
 class ObjectType(Type):
     def __init__(self, name: str, fields: Dict[str, Type]):
-        super().__init__(name)
+        super().__init__(name, [])
         self.fields = fields
 
     @classmethod
@@ -228,9 +214,6 @@ class ObjectType(Type):
                 else:
                     raise UnknownReferenceError()
 
-    def __get_states(self) -> List[states.State]:
-        return []
-
     def __get_state_transitions(self) -> List[state_transition.StateTransition]:
         fields_list = list(self.fields)
 
@@ -245,7 +228,7 @@ class ObjectType(Type):
 
 class ReferenceType(Type):
     def __init__(self, name: str):
-        super().__init__(name)
+        super().__init__(name, [])
 
     @classmethod
     def from_json(cls, json_object):
@@ -262,9 +245,6 @@ class ReferenceType(Type):
 
     def set_child_type(self, key, value):
         raise TypeError("Can't set child type on a reference type")
-
-    def __get_states(self) -> List[states.State]:
-        return []
 
     def __get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
