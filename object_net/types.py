@@ -1,7 +1,9 @@
 from . import states, state_transition
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Set
 from typing import Type as TypingType
+import itertools
 import json
+import queue
 import tensorflow as tf
 
 
@@ -274,6 +276,30 @@ def resolve_references(types: List[Type]):
 
     for _type in types:
         _type.resolve_references(type_dict)
+
+
+def get_all_state_transitions(_type: Type) -> Set[state_transition.StateTransition]:
+    all_types = get_all_types(_type)
+    all_state_transitions = [_type.get_state_transitions() for _type in all_types]
+
+    return set(itertools.chain(all_state_transitions))
+
+
+def get_all_types(_type: Type):
+    explored_types = [_type]
+    explore_queue = queue.Queue()
+    explore_queue.put(_type)
+
+    while not explore_queue.empty():
+        current_type = explore_queue.get()
+        explored_types.append(current_type)
+
+        for key in current_type.get_child_keys():
+            child = current_type.get_child_type(key)
+            if child not in explored_types:
+                explore_queue.put(child)
+
+    return explored_types
 
 
 def create_from_json(json_str: str) -> List[Type]:

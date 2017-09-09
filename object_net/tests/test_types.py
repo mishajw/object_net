@@ -140,6 +140,13 @@ class TestTypes(unittest.TestCase):
 
         types.resolve_references(created_types)
 
+    def test_get_all_types(self):
+        tree_types = TestTypes.get_tree_types()
+        all_types = types.get_all_types(tree_types[0])
+
+        for _type in tree_types:
+            self.assertIn(_type, all_types)
+
     @staticmethod
     def get_tree_types():
         mod_three = types.EnumType("mod_three", ["one", "two", "three"])
