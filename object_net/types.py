@@ -62,7 +62,7 @@ class Type:
 
         raise ValueError("Can't find state in type %s with name %s" % (self, state_name))
 
-    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
         raise NotImplementedError()
 
 
@@ -81,7 +81,7 @@ class PrimitiveType(Type):
     def validate(self, value):
         assert isinstance(value, self.primitive)
 
-    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
 
@@ -100,7 +100,7 @@ class EnumType(Type):
     def validate(self, value):
         assert any([value == option for option in self.options])
 
-    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
 
@@ -128,7 +128,7 @@ class UnionType(Type):
     def set_child_type(self, key, value):
         self.types[key] = value
 
-    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return [
             state_transition.ChildStateTransition(
                 self.initial_state,
@@ -164,7 +164,7 @@ class OptionalType(Type):
         assert key is None
         self.type = value
 
-    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return [
             state_transition.ChildStateTransition(
                 self.initial_state,
@@ -214,7 +214,7 @@ class ObjectType(Type):
                 else:
                     raise UnknownReferenceError()
 
-    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
         fields_list = list(self.fields)
 
         for i in range(len(self.fields.keys()) - 1):
@@ -246,7 +246,7 @@ class ReferenceType(Type):
     def set_child_type(self, key, value):
         raise TypeError("Can't set child type on a reference type")
 
-    def __get_state_transitions(self) -> List[state_transition.StateTransition]:
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
 
