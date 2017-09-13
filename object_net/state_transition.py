@@ -11,10 +11,14 @@ def get_should_return_value(_state):
     return tf.constant(_state is not None)
 
 
-def create_pred(current_state: tf.Tensor, initial_state: states.State, other_preds_fn: OtherPredsFn) -> tf.Tensor:
+def create_pred(
+        current_state: tf.Tensor,
+        current_output: tf.Tensor,
+        initial_state: states.State,
+        other_preds_fn: OtherPredsFn) -> tf.Tensor:
     state_pred = tf.equal(current_state, initial_state.id)
 
-    other_preds = None if other_preds_fn is None else other_preds_fn()
+    other_preds = None if other_preds_fn is None else other_preds_fn(current_output)
 
     if other_preds is None:
         return state_pred
@@ -31,6 +35,7 @@ class StateTransition:
     def get_pred_fn_pair(
             self,
             current_state: tf.Tensor,
+            current_output: tf.Tensor,
             stack: state_stack.StateStack,
             hidden_vector: tf.Tensor) -> (tf.Tensor, TransitionFn):
         raise NotImplementedError()
@@ -45,6 +50,7 @@ class InnerStateTransition(StateTransition):
     def get_pred_fn_pair(
             self,
             current_state: tf.Tensor,
+            current_output: tf.Tensor,
             stack: state_stack.StateStack,
             hidden_vector: tf.Tensor) -> (tf.Tensor, TransitionFn):
         new_stack = stack
@@ -53,7 +59,7 @@ class InnerStateTransition(StateTransition):
             new_stack = state_stack.push(new_stack, self.next_state.id, hidden_vector)
 
         return \
-            create_pred(current_state, self.initial_state, self.other_preds_fn), \
+            create_pred(current_state, current_output, self.initial_state, self.other_preds_fn), \
             lambda: (*new_stack, get_should_return_value(self.next_state))
 
 
@@ -72,6 +78,7 @@ class ChildStateTransition(StateTransition):
     def get_pred_fn_pair(
             self,
             current_state: tf.Tensor,
+            current_output: tf.Tensor,
             stack: state_stack.StateStack,
             hidden_vector: tf.Tensor) -> (tf.Tensor, TransitionFn):
         def fn():
@@ -84,4 +91,4 @@ class ChildStateTransition(StateTransition):
 
             return (*new_stack, get_should_return_value(self.next_inner_state))
 
-        return create_pred(current_state, self.initial_state, self.other_preds_fn), fn
+        return create_pred(current_state, current_output, self.initial_state, self.other_preds_fn), fn
