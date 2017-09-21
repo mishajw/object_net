@@ -91,6 +91,11 @@ class LstmHiddenVectorNetwork(HiddenVectorNetwork):
             elif state.output_type == states.OutputType.REAL:
                 # Output is already in the range of real numbers
                 pass
+            elif state.output_type == states.OutputType.NONE:
+                # Output does not exist therefore doesn't need editing
+                pass
+            else:
+                raise ValueError("Output type is not recognised in state %s: %s" % (state, state.output_type))
 
         next_hidden_vector = tf.concat(next_hidden_vector_pieces, axis=0)
 

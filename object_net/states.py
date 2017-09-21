@@ -22,6 +22,9 @@ class OutputType(Enum):
     REAL = 2
     """Output in the range negative infinity to infinity"""
 
+    NONE = 3
+    """Do not output anything at this state"""
+
 
 class State:
     def __init__(self, name: str, num_outputs: int, output_type: OutputType):
