@@ -1,7 +1,8 @@
 from . import object_net_components
 from . import padder
 from . import state_stack
-from . import states
+from . import state_transition
+from . import types
 import numpy as np
 import tensorflow as tf
 import tf_utils
@@ -17,24 +18,20 @@ class ObjectNetWriter:
             truth_padded_data: padder.PlaceholderPaddedData,
             initial_hidden_vector_input: tf.Tensor,
             hidden_vector_size: int,
-            state_output_descriptions: [states.OutputDescription],
-            update_state_stack_fn: states.UpdateStateStackFn,
-            initial_state: int,
-            training: bool,
+            object_type: types.Type,
+            training: bool, # TODO: rename
             hidden_vector_network: object_net_components.HiddenVectorNetwork):
         """
         Initialise TensorFlow graph
         :param truth_padded_data: the input data
         :param initial_hidden_vector_input: the inputs for each example in the batch
         :param hidden_vector_size: size of hidden vectors
-        :param state_output_descriptions: the respective sizes of outputs for each state
-        :param update_state_stack_fn: function that gives transitions between states
+        :param object_type: the object type we are writing
+        :param training: true if training
+        :param hidden_vector_network: the network to run when passing through hidden vectors
         """
         self.hidden_vector_size = hidden_vector_size
-        self.state_output_descriptions = \
-            [states.OutputDescription(0, states.OutputType.REAL)] + state_output_descriptions
-        self.update_state_stack_fn = update_state_stack_fn
-        self.initial_state = initial_state
+        self.object_type = object_type
         self.training = training
         self.hidden_vector_network = hidden_vector_network
 
@@ -131,9 +128,9 @@ class ObjectNetWriter:
                 child_hidden_vector: tf.Tensor,
                 inner_hidden_vector: tf.Tensor,
                 state_number: int):
-            state_output_description = self.state_output_descriptions[state_number]
+            state = self.object_type.get_all_states()[state_number]
             return self.hidden_vector_network(
-                parent_hidden_vector, child_hidden_vector, inner_hidden_vector, state_output_description, state_number)
+                parent_hidden_vector, child_hidden_vector, inner_hidden_vector, state)
 
         def body(
                 step: int,
@@ -159,8 +156,8 @@ class ObjectNetWriter:
             num_outputs = tf.case(
                 pred_fn_pairs=[(
                     tf.equal(state, i),
-                    lambda i=i: tf.constant(self.state_output_descriptions[i].num_outputs))
-                    for i in range(len(self.state_output_descriptions))],
+                    lambda i=i: tf.constant(self.object_type.get_all_states()[i].num_outputs))
+                    for i in range(len(self.object_type.get_all_states()))],
                 default=lambda: tf.constant(0))
 
             # Call `create_guess_layers(...)` depending on what state we're in
@@ -168,7 +165,7 @@ class ObjectNetWriter:
                 pred_fn_pairs=[(
                     tf.equal(state, i),
                     lambda i=i: create_guess_layers(hidden_vector_summary, return_value, hidden_vector, i))
-                    for i in range(len(self.state_output_descriptions))],
+                    for i in range(len(self.object_type.get_all_states()))],
                 default=lambda: (hidden_vector, tf.constant(0, dtype=tf.float32) / tf.constant(0, tf.float32)))
 
             # Reshape the hidden vector so we know what size it is
@@ -182,7 +179,7 @@ class ObjectNetWriter:
                 stack_update_choice = current_choice
 
             # Update the state stack
-            stack, return_value = self.update_state_stack_fn(stack, next_hidden_vector, stack_update_choice)
+            stack, return_value = self.__update_state_stack(stack, next_hidden_vector, stack_update_choice)
 
             return \
                 step + 1, \
@@ -203,7 +200,7 @@ class ObjectNetWriter:
 
         # Create the initial stack with initial hidden vector and state
         initial_stack = state_stack.create(max_size=self.max_steps, hidden_vector_size=self.hidden_vector_size)
-        initial_stack = state_stack.push(initial_stack, self.initial_state, initial_hidden_vector)
+        initial_stack = state_stack.push(initial_stack, self.object_type.get_initial_state().id, initial_hidden_vector)
 
         # Create the `tf.TensorArray` to hold all outputs
         initial_states_ta = tf.TensorArray(
@@ -244,6 +241,36 @@ class ObjectNetWriter:
             final_outputs_counts_ta = tf_utils.resize_tensor_array(final_outputs_counts_ta, final_step)
 
         return final_states_ta, final_outputs_ta, final_outputs_counts_ta, final_step
+
+    def __update_state_stack(
+            self,
+            stack: state_stack.StateStack,
+            hidden_vector: tf.Tensor,
+            output: tf.Tensor) -> (state_stack.StateStack, tf.Tensor):
+
+        state, popped_hidden_vector, stack = state_stack.pop(stack)
+
+        all_state_transitions = self.object_type.get_all_state_transitions()
+        pred_fn_pairs = [_state_transition.get_pred_fn_pair(state, output, stack, hidden_vector)
+                         for _state_transition in all_state_transitions]
+
+        tensor, element_count, should_return_value = tf.case(
+            pred_fn_pairs=pred_fn_pairs,
+            default=lambda: (*stack, state_transition.get_should_return_value(None)),
+            exclusive=True)
+
+        # TODO: Is this the best place to do this? Should this function be more abstract?
+        tensor = tf.reshape(tensor, tf.shape(stack[0]))
+
+        return_value = tf.cond(
+            should_return_value,
+            # The return value is the popped hidden vector
+            lambda: popped_hidden_vector,
+            # Else return a `tf.Tensor` of NaNs
+            # TODO: Check for other ways of representing the absence of a `tf.Tensor`
+            lambda: tf.constant(np.nan, dtype=tf.float32, shape=[state_stack.get_hidden_vector_size(stack)]))
+
+        return (tensor, element_count), return_value
 
     @staticmethod
     def __get_cost(truth_outputs_padded, generated_outputs_padded):

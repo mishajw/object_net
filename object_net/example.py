@@ -2,7 +2,6 @@ from . import object_net_components
 from . import object_net_writer
 from . import padder
 from . import prime_factors
-from . import states
 import configargparse
 import math
 import random
@@ -47,13 +46,7 @@ def example():
             truth_padded_data,
             truth_initial_hidden_vector_input,
             hidden_vector_size=args.hidden_vector_length,
-            state_output_descriptions=[
-                states.OutputDescription(1, states.OutputType.REAL),
-                states.OutputDescription(3, states.OutputType.BOOL),
-                states.OutputDescription(1, states.OutputType.BOOL),
-                states.OutputDescription(1, states.OutputType.BOOL)],
-            update_state_stack_fn=prime_factors.update_state_stack,
-            initial_state=1,
+            object_type=prime_factors.get_prime_factor_tree_type(),
             training=training,
             hidden_vector_network=object_net_components.LstmHiddenVectorNetwork(
                 args.hidden_vector_length,
