@@ -147,7 +147,7 @@ class TestTypes(unittest.TestCase):
 
     def test_get_all_types(self):
         tree_types = TestTypes.get_tree_types()
-        all_types = types.get_all_types(tree_types[0])
+        all_types = tree_types[0].get_all_types()
 
         for _type in tree_types:
             self.assertIn(_type, all_types)
