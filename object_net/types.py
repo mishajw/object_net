@@ -339,19 +339,32 @@ def create_from_json(json_str: str) -> List[Type]:
 def create_from_dict(json_object: dict) -> List[Type]:
     assert "types" in json_object and isinstance(json_object["types"], list)
 
-    for type_object in json_object["types"]:
-        assert "base" in type_object and isinstance(type_object["base"], str)
-        base = type_object["base"]
-        type_object.pop("base")
+    def get_types():
+        for type_object in json_object["types"]:
+            assert "base" in type_object and isinstance(type_object["base"], str)
+            base = type_object["base"]
+            type_object.pop("base")
 
-        if base == "enum":
-            yield EnumType.from_json(type_object)
-        elif base == "union":
-            yield UnionType.from_json(type_object)
-        elif base == "optional":
-            yield OptionalType.from_json(type_object)
-        elif base == "object":
-            yield ObjectType.from_json(type_object)
+            if base == "enum":
+                yield EnumType.from_json(type_object)
+            elif base == "union":
+                yield UnionType.from_json(type_object)
+            elif base == "optional":
+                yield OptionalType.from_json(type_object)
+            elif base == "object":
+                yield ObjectType.from_json(type_object)
+
+    # Get types
+    all_types = list(get_types())
+
+    # Remove all reference types
+    resolve_references(all_types)
+
+    # Assign IDs to all states
+    if len(all_types) > 0:
+        states.State.assign_ids(all_types[0].get_all_states())
+
+    return all_types
 
 
 def condition_if_exists(output: tf.Tensor, condition: tf.Tensor) -> tf.Tensor:

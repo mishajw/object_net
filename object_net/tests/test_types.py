@@ -37,7 +37,7 @@ class TestTypes(unittest.TestCase):
             }
             """)
 
-        mod_three = next(created_types)
+        mod_three = created_types[0]
 
         assert isinstance(mod_three, types.EnumType)
         self.assertIsInstance(mod_three, types.EnumType)
@@ -58,7 +58,7 @@ class TestTypes(unittest.TestCase):
             }
             """)
 
-        int_or_float = next(created_types)
+        int_or_float = created_types[0]
 
         assert isinstance(int_or_float, types.UnionType)
         self.assertIsInstance(int_or_float, types.UnionType)
@@ -78,7 +78,7 @@ class TestTypes(unittest.TestCase):
             }
             """)
 
-        int_opt = next(created_types)
+        int_opt = created_types[0]
 
         assert isinstance(int_opt, types.OptionalType)
         self.assertIsInstance(int_opt, types.OptionalType)
@@ -100,7 +100,7 @@ class TestTypes(unittest.TestCase):
             }
             """)
 
-        coordinates = next(created_types)
+        coordinates = created_types[0]
 
         assert isinstance(coordinates, types.ObjectType)
         self.assertIsInstance(coordinates, types.ObjectType)
