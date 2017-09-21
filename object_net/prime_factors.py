@@ -1,10 +1,11 @@
 from . import state_stack
 from . import states
+from . import types
+from types import GeneratorType
 import itertools
 import math
 import numpy as np
 import tensorflow as tf
-import types
 
 
 def add_arguments(parser):
@@ -198,7 +199,7 @@ def array_to_tree(initial_array: [(int, [int])], args) -> PrimeFactorTree:
         return final_tree, array
 
     # Ensure that `array` is a generator
-    if not isinstance(initial_array, types.GeneratorType):
+    if not isinstance(initial_array, GeneratorType):
         initial_array = iter(initial_array)
 
     tree, _ = get_tree(initial_array)
