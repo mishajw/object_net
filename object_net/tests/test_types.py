@@ -140,6 +140,11 @@ class TestTypes(unittest.TestCase):
 
         types.resolve_references(created_types)
 
+        all_types = created_types[0].get_all_types()
+
+        for _type in all_types:
+            self.assertNotIsInstance(_type, types.ReferenceType)
+
     def test_get_all_types(self):
         tree_types = TestTypes.get_tree_types()
         all_types = types.get_all_types(tree_types[0])
