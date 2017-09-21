@@ -35,6 +35,9 @@ class State:
         for i, state in enumerate(states):
             state.id = i
 
+    def __str__(self):
+        return "State(%s, %d)" % (self.name, self.id)
+
 
 class StateEncoder:
     """Encode states strings into integers for NumPy arrays"""

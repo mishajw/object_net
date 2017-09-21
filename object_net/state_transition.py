@@ -62,6 +62,9 @@ class InnerStateTransition(StateTransition):
             create_pred(current_state, current_output, self.initial_state, self.other_preds_fn), \
             lambda: (*new_stack, get_should_return_value(self.next_state))
 
+    def __str__(self):
+        return "InnerStateTransition(%s -> %s)" % (self.initial_state, self.next_state)
+
 
 class ChildStateTransition(StateTransition):
     def __init__(
@@ -92,3 +95,7 @@ class ChildStateTransition(StateTransition):
             return (*new_stack, get_should_return_value(self.next_inner_state))
 
         return create_pred(current_state, current_output, self.initial_state, self.other_preds_fn), fn
+
+    def __str__(self):
+        return "ChildStateTransition(%s -> %s -> %s)" \
+               % (self.initial_state, self.new_child_state, self.next_inner_state)
