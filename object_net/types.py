@@ -42,7 +42,6 @@ class Type:
     def set_child_type(self, key, value):
         raise ValueError("No children")
 
-    # TODO: Look into having polymorphic child setters and getters so this doesn't need to be implemented for all types
     def resolve_references(self, type_dict):
         for key in self.get_child_keys():
             child_type = self.get_child_type(key)
