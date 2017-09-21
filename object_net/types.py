@@ -1,5 +1,5 @@
 from . import states, state_transition
-from typing import Dict, List, Any, Set
+from typing import Dict, List, Any
 from typing import Type as TypingType
 import itertools
 import json
@@ -22,11 +22,6 @@ class Type:
     def __init__(self, name: str, _states: List[states.State]):
         self.name = name
         self.states = _states
-
-        if len(self.states) > 0:
-            self.initial_state = self.states[0]
-        else:
-            self.initial_state = None
 
     @classmethod
     def from_json(cls, json_object):
@@ -55,7 +50,7 @@ class Type:
                 if child_type.name in type_dict.keys():
                     self.set_child_type(key, type_dict[child_type.name])
                 else:
-                    raise UnknownReferenceError()
+                    raise UnknownReferenceError(child_type.name)
 
     def get_state_by_name(self, state_name: str):
         for state in self.states:
@@ -66,6 +61,41 @@ class Type:
 
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         raise NotImplementedError()
+
+    def get_initial_state(self):
+        if len(self.states) > 0:
+            return self.states[0]
+
+        raise ValueError("No states available to return initial state")
+
+    def get_all_states(self) -> List[states.State]:
+        all_types = self.get_all_types()
+        all_states = [_type.states for _type in all_types]
+
+        return list(itertools.chain(*all_states))
+
+    def get_all_state_transitions(self) -> List[state_transition.StateTransition]:
+        all_types = self.get_all_types()
+        all_state_transitions = [_type.get_state_transitions() for _type in all_types]
+
+        return list(itertools.chain(*all_state_transitions))
+
+    # TODO: Explore caching this result
+    def get_all_types(self) -> List["Type"]:
+        explored_types = [self]
+        explore_queue = queue.Queue()
+        explore_queue.put(self)
+
+        while not explore_queue.empty():
+            current_type = explore_queue.get()
+            explored_types.append(current_type)
+
+            for key in current_type.get_child_keys():
+                child = current_type.get_child_type(key)
+                if child not in explored_types:
+                    explore_queue.put(child)
+
+        return list(set(explored_types))
 
 
 TypeDict = Dict[str, Type]
@@ -133,8 +163,8 @@ class UnionType(Type):
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return [
             state_transition.ChildStateTransition(
-                self.initial_state,
-                _type.initial_state,
+                self.get_initial_state(),
+                _type.get_initial_state(),
                 other_preds_fn=lambda output: tf.equal(tf.argmax(output), i))
             for i, _type in enumerate(self.types)]
 
@@ -169,18 +199,21 @@ class OptionalType(Type):
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return [
             state_transition.ChildStateTransition(
-                self.initial_state,
-                self.type.initial_state,
-                other_preds_fn=lambda output: tf.greater_equal(output[0], 0.5)),
+                self.get_initial_state(),
+                self.type.get_initial_state(),
+                other_preds_fn=lambda output: condition_if_exists(output, tf.greater_equal(output[0], 0.5))),
             state_transition.InnerStateTransition(
-                self.initial_state,
-                other_preds_fn=lambda output: tf.less(output[0], 0.5))]
+                self.get_initial_state(),
+                other_preds_fn=lambda output: condition_if_exists(output, tf.less(output[0], 0.5)))]
 
 
 class ObjectType(Type):
     def __init__(self, name: str, fields: Dict[str, Type]):
-        super().__init__(name, [])
+        super().__init__(name, [
+            states.State(self.__get_state_name(key, name), 0, states.OutputType.NONE)
+            for key in fields])
         self.fields = fields
+        self.__first_field_key = next(iter(self.fields))
 
     @classmethod
     def from_json(cls, json_object: dict):
@@ -214,7 +247,7 @@ class ObjectType(Type):
                 if _type.name in type_dict.keys():
                     self.fields[key] = type_dict[_type.name]
                 else:
-                    raise UnknownReferenceError()
+                    raise UnknownReferenceError(_type.name)
 
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         fields_list = list(self.fields)
@@ -223,9 +256,21 @@ class ObjectType(Type):
             current_field_name = fields_list[i]
             next_field_name = fields_list[i + 1]
 
-            yield state_transition.InnerStateTransition(
-                self.fields[current_field_name].initial_state,
-                self.fields[next_field_name].initial_state)
+            yield state_transition.ChildStateTransition(
+                self.get_state_by_name(self.__get_state_name(current_field_name)),
+                self.fields[current_field_name].get_initial_state(),
+                self.get_state_by_name(self.__get_state_name(next_field_name)))
+
+        final_field_name = fields_list[-1]
+        yield state_transition.ChildStateTransition(
+            self.get_state_by_name(self.__get_state_name(final_field_name)),
+            self.fields[final_field_name].get_initial_state())
+
+    def __get_state_name(self, field_name, name: str=None):
+        if name is None:
+            name = self.name
+
+        return "%s.%s" % (name, field_name)
 
 
 class ReferenceType(Type):
@@ -253,7 +298,8 @@ class ReferenceType(Type):
 
 
 class UnknownReferenceError(RuntimeError):
-    pass
+    def __init__(self, name: str):
+        super().__init__("Couldn't find %s" % name)
 
 
 class Instance:
@@ -264,42 +310,24 @@ class Instance:
         self.type = _type
 
 
-int_type = PrimitiveType("int", int, num_outputs=0, output_type=states.OutputType.REAL)
-float_type = PrimitiveType("float", float, num_outputs=0, output_type=states.OutputType.REAL)
-bool_type = PrimitiveType("bool", bool, num_outputs=0, output_type=states.OutputType.REAL)
+int_type = PrimitiveType("int", int, num_outputs=1, output_type=states.OutputType.REAL)
+float_type = PrimitiveType("float", float, num_outputs=1, output_type=states.OutputType.REAL)
+bool_type = PrimitiveType("bool", bool, num_outputs=1, output_type=states.OutputType.REAL)
 
 
 def resolve_references(types: List[Type]):
-    types.extend([int_type, float_type, bool_type])
+    # Get all unique types
+    all_types = list(set(itertools.chain(*[_type.get_all_types() for _type in types])))
+    # Add in primitives
+    all_types.extend([int_type, float_type, bool_type])
+    # Remove reference types
+    all_types = list(filter(lambda _type: not isinstance(_type, ReferenceType), all_types))
+    # Build dictionary of type names to types
+    all_types_dict = dict((_type.name, _type) for _type in all_types if not isinstance(_type, ReferenceType))
 
-    type_dict = dict((_type.name, _type) for _type in types)
-
-    for _type in types:
-        _type.resolve_references(type_dict)
-
-
-def get_all_state_transitions(_type: Type) -> Set[state_transition.StateTransition]:
-    all_types = get_all_types(_type)
-    all_state_transitions = [_type.get_state_transitions() for _type in all_types]
-
-    return set(itertools.chain(all_state_transitions))
-
-
-def get_all_types(_type: Type):
-    explored_types = [_type]
-    explore_queue = queue.Queue()
-    explore_queue.put(_type)
-
-    while not explore_queue.empty():
-        current_type = explore_queue.get()
-        explored_types.append(current_type)
-
-        for key in current_type.get_child_keys():
-            child = current_type.get_child_type(key)
-            if child not in explored_types:
-                explore_queue.put(child)
-
-    return explored_types
+    # Remove references in all types
+    for _type in all_types:
+        _type.resolve_references(all_types_dict)
 
 
 def create_from_json(json_str: str) -> List[Type]:
@@ -324,3 +352,17 @@ def create_from_dict(json_object: dict) -> List[Type]:
             yield OptionalType.from_json(type_object)
         elif base == "object":
             yield ObjectType.from_json(type_object)
+
+
+def condition_if_exists(output: tf.Tensor, condition: tf.Tensor) -> tf.Tensor:
+    """
+    Perform the condition `condition` on `output` if output is not empty
+    If `output` is empty, return false
+    :param output: the potentially empty tensor to check with `condition`
+    :param condition: the condition that takes into account `output`
+    :return: a bool typed tensor
+    """
+    return tf.cond(
+        pred=tf.reduce_all(tf.equal(tf.shape(output), [])),
+        fn1=lambda: tf.constant(False),
+        fn2=lambda: condition)
