@@ -69,7 +69,7 @@ class LstmHiddenVectorNetwork(HiddenVectorNetwork):
 
             # next_hidden_vector = tf.concat([new_c, new_h], axis=0)
 
-        with tf.variable_scope("make_choice_%d" % state):
+        with tf.variable_scope("make_choice_%s" % tf_utils.format_for_scope(state.name)):
             weights = tf_utils.try_create_scoped_variable(
                 name="weights",
                 shape=[self.layer_hidden_vector_size / 2, state.num_outputs],
