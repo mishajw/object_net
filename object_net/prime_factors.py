@@ -17,6 +17,33 @@ def add_arguments(parser):
 state_encoder = states.StateEncoder(["value", "mod_three", "left_opt", "right_opt"])
 
 
+def get_prime_factor_tree_type():
+    all_types = types.create_from_dict(
+        {
+            "types": [
+                {
+                    "base": "object",
+                    "name": "tree",
+                    "value": "int",
+                    "mod_three": "mod_three",
+                    "left": "optional[tree]",
+                    "right": "optional[tree]"
+                },
+                {
+                    "base": "enum",
+                    "name": "mod_three",
+                    "options": ["one", "two", "three"]
+                },
+                {
+                    "base": "optional",
+                    "type": "tree"
+                }
+            ]
+        })
+
+    return all_types[0]
+
+
 class PrimeFactorTree:
     def __init__(self, value: float, left, right):
         self.value = value
