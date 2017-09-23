@@ -192,7 +192,7 @@ class TestTypes(unittest.TestCase):
 
     @staticmethod
     def get_tree_types():
-        mod_three = types.EnumType("mod_three", ["one", "two", "three"])
+        mod_three = types.EnumType("mod_three", ["zero", "one", "two"])
         tree_opt = types.OptionalType(types.ReferenceType("tree"))
 
         tree = types.ObjectType(
