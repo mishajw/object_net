@@ -1,5 +1,5 @@
 from . import states, state_transition
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from typing import Type as TypingType
 import itertools
 import json
@@ -41,6 +41,9 @@ class Type:
 
     def set_child_type(self, key, value):
         raise ValueError("No children")
+
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+        raise NotImplementedError()
 
     def resolve_references(self, type_dict):
         for key in self.get_child_keys():
@@ -115,6 +118,9 @@ class PrimitiveType(Type):
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+        return [(self.get_initial_state(), [value])]
+
 
 class EnumType(Type):
     def __init__(self, name: str, options: List[str]):
@@ -133,6 +139,12 @@ class EnumType(Type):
 
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
+
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+        output = [0] * len(self.options)
+        output[self.options.index(value)] = 1
+
+        return [(self.get_initial_state(), output)]
 
 
 class UnionType(Type):
@@ -166,6 +178,9 @@ class UnionType(Type):
                 _type.get_initial_state(),
                 other_preds_fn=lambda output: tf.equal(tf.argmax(output), i))
             for i, _type in enumerate(self.types)]
+
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+        raise NotImplementedError()
 
 
 class OptionalType(Type):
@@ -204,6 +219,16 @@ class OptionalType(Type):
             state_transition.InnerStateTransition(
                 self.get_initial_state(),
                 other_preds_fn=lambda output: condition_if_exists(output, tf.less(output[0], 0.5)))]
+
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+        value_is_empty = value == {}
+
+        optional_state = (self.get_initial_state(), [0.0 if value_is_empty else 1.0])
+
+        if value_is_empty:
+            return [optional_state]
+        else:
+            return [optional_state] + list(self.type.get_state_output_pairs(value))
 
 
 class ObjectType(Type):
@@ -271,6 +296,11 @@ class ObjectType(Type):
 
         return "%s.%s" % (name, field_name)
 
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+        for key in self.fields:
+            yield (self.get_state_by_name(self.__get_state_name(key)), [])
+            yield from self.fields[key].get_state_output_pairs(value[key])
+
 
 class ReferenceType(Type):
     def __init__(self, name: str):
@@ -294,6 +324,9 @@ class ReferenceType(Type):
 
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
+
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+        raise TypeError("Can't get state output pairs from reference type")
 
 
 class UnknownReferenceError(RuntimeError):

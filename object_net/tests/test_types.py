@@ -152,6 +152,40 @@ class TestTypes(unittest.TestCase):
         for _type in tree_types:
             self.assertIn(_type, all_types)
 
+    def test_get_state_output_pairs(self):
+        tree_type = self.get_complete_tree_types()[0]
+
+        example_value = {
+            "value": 6,
+            "mod_three": "zero",
+            "left": {
+                "value": 3,
+                "mod_three": "zero",
+                "left": {},
+                "right": {}
+            },
+            "right": {
+                "value": 2,
+                "mod_three": "two",
+                "left": {},
+                "right": {}
+            },
+        }
+        state_output_pairs = list(tree_type.get_state_output_pairs(example_value))
+
+        self.assertEqual(state_output_pairs[1][1], [6])
+        self.assertEqual(state_output_pairs[3][1], [1, 0, 0])
+        self.assertEqual(state_output_pairs[5][1], [1.0])
+        self.assertEqual(state_output_pairs[7][1], [3])
+        self.assertEqual(state_output_pairs[9][1], [1, 0, 0])
+        self.assertEqual(state_output_pairs[11][1], [0.0])
+        self.assertEqual(state_output_pairs[13][1], [0.0])
+        self.assertEqual(state_output_pairs[15][1], [1.0])
+        self.assertEqual(state_output_pairs[17][1], [2])
+        self.assertEqual(state_output_pairs[19][1], [0, 0, 1])
+        self.assertEqual(state_output_pairs[21][1], [0.0])
+        self.assertEqual(state_output_pairs[23][1], [0.0])
+
     @staticmethod
     def get_tree_types():
         mod_three = types.EnumType("mod_three", ["one", "two", "three"])
@@ -167,3 +201,31 @@ class TestTypes(unittest.TestCase):
             })
 
         return [tree, mod_three, tree_opt]
+
+    # TODO: Combine this and the previous method somehow
+    @staticmethod
+    def get_complete_tree_types():
+        return types.create_from_json(
+            """
+            {
+                "types": [
+                    {
+                        "base": "object",
+                        "name": "tree",
+                        "value": "int",
+                        "mod_three": "mod_three",
+                        "left": "optional[tree]",
+                        "right": "optional[tree]"
+                    },
+                    {
+                        "base": "enum",
+                        "name": "mod_three",
+                        "options": ["zero", "one", "two"]
+                    },
+                    {
+                        "base": "optional",
+                        "type": "tree"
+                    }
+                ]
+            }
+            """)
