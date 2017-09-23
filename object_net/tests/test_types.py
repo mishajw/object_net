@@ -186,6 +186,10 @@ class TestTypes(unittest.TestCase):
         self.assertEqual(state_output_pairs[21][1], [0.0])
         self.assertEqual(state_output_pairs[23][1], [0.0])
 
+        value = tree_type.get_value_from_state_output_pairs(iter(state_output_pairs))
+
+        self.assertDictEqual(value, example_value)
+
     @staticmethod
     def get_tree_types():
         mod_three = types.EnumType("mod_three", ["one", "two", "three"])

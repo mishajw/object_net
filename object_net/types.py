@@ -1,5 +1,5 @@
 from . import states, state_transition
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Iterator
 from typing import Type as TypingType
 import itertools
 import json
@@ -42,7 +42,7 @@ class Type:
     def set_child_type(self, key, value):
         raise ValueError("No children")
 
-    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
         raise NotImplementedError()
 
     def resolve_references(self, type_dict):
@@ -99,6 +99,9 @@ class Type:
 
         return list(set(explored_types))
 
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
+        raise NotImplementedError()
+
 
 TypeDict = Dict[str, Type]
 
@@ -118,8 +121,16 @@ class PrimitiveType(Type):
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
-    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
-        return [(self.get_initial_state(), [value])]
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
+        return [(self.get_initial_state().id, [value])]
+
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
+        state, output = next(state_output_pairs)
+
+        assert state == self.get_initial_state().id
+        assert len(output) == 1
+
+        return self.primitive(output[0])
 
 
 class EnumType(Type):
@@ -140,11 +151,25 @@ class EnumType(Type):
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
-    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
         output = [0] * len(self.options)
         output[self.options.index(value)] = 1
 
-        return [(self.get_initial_state(), output)]
+        return [(self.get_initial_state().id, output)]
+
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
+        state, output = next(state_output_pairs)
+
+        assert state == self.get_initial_state().id
+        assert len(output) == len(self.options)
+
+        # TODO: Check if there's an argmax function in stdlib
+        max_index = 0
+        for i in range(len(output)):
+            if output[max_index] < output[i]:
+                max_index = i
+
+        return self.options[max_index]
 
 
 class UnionType(Type):
@@ -179,7 +204,10 @@ class UnionType(Type):
                 other_preds_fn=lambda output: tf.equal(tf.argmax(output), i))
             for i, _type in enumerate(self.types)]
 
-    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
+        raise NotImplementedError()
+
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
         raise NotImplementedError()
 
 
@@ -220,15 +248,26 @@ class OptionalType(Type):
                 self.get_initial_state(),
                 other_preds_fn=lambda output: condition_if_exists(output, tf.less(output[0], 0.5)))]
 
-    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
         value_is_empty = value == {}
 
-        optional_state = (self.get_initial_state(), [0.0 if value_is_empty else 1.0])
+        optional_state = (self.get_initial_state().id, [0.0 if value_is_empty else 1.0])
 
         if value_is_empty:
             return [optional_state]
         else:
             return [optional_state] + list(self.type.get_state_output_pairs(value))
+
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
+        state, output = next(state_output_pairs)
+
+        assert state == self.get_initial_state().id
+        assert len(output) == 1
+
+        if output[0] < 0.5:
+            return {}
+        else:
+            return self.type.get_value_from_state_output_pairs(state_output_pairs)
 
 
 class ObjectType(Type):
@@ -296,11 +335,26 @@ class ObjectType(Type):
 
         return "%s.%s" % (name, field_name)
 
-    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
         for key in self.fields:
-            yield (self.get_state_by_name(self.__get_state_name(key)), [])
+            yield (self.get_state_by_name(self.__get_state_name(key)).id, [])
             yield from self.fields[key].get_state_output_pairs(value[key])
 
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
+        value = {}
+        keys = list(self.fields.keys())
+
+        for i in range(len(keys)):
+            state, output = next(state_output_pairs)
+            _type = self.fields[keys[i]]
+            type_state = self.get_state_by_name(self.__get_state_name(keys[i]))
+
+            assert state == type_state.id
+            assert len(output) == 0
+
+            value[keys[i]] = _type.get_value_from_state_output_pairs(state_output_pairs)
+
+        return value
 
 class ReferenceType(Type):
     def __init__(self, name: str):
@@ -325,8 +379,11 @@ class ReferenceType(Type):
     def get_state_transitions(self) -> List[state_transition.StateTransition]:
         return []
 
-    def get_state_output_pairs(self, value: Any) -> List[Tuple[states.State, List[float]]]:
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
         raise TypeError("Can't get state output pairs from reference type")
+
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
+        raise TypeError("Can't get value from state output pairs on a reference type")
 
 
 class UnknownReferenceError(RuntimeError):
