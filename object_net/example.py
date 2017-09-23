@@ -23,8 +23,9 @@ def example():
 
     # Generate data
     print("Generating data...")
+    tree_type = prime_factors.get_prime_factor_tree_type()
     trees = prime_factors.get_trees(args)
-    arrays = [prime_factors.tree_to_array(tree, args) for tree in trees]
+    arrays = [list(tree_type.get_state_output_pairs(tree)) for tree in trees]
     random.shuffle(arrays)
     padded_arrays = padder.PaddedData.from_unpadded(arrays)
     data_holder = tf_utils.data_holder.DataHolder(
@@ -46,7 +47,7 @@ def example():
             truth_padded_data,
             truth_initial_hidden_vector_input,
             hidden_vector_size=args.hidden_vector_length,
-            object_type=prime_factors.get_prime_factor_tree_type(),
+            object_type=tree_type,
             training=training,
             hidden_vector_network=object_net_components.LstmHiddenVectorNetwork(
                 args.hidden_vector_length,
