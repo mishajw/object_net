@@ -1,11 +1,6 @@
-from . import state_stack
 from . import states
 from . import types
-from types import GeneratorType
-import itertools
 import math
-import numpy as np
-import tensorflow as tf
 
 
 def add_arguments(parser):
@@ -32,7 +27,7 @@ def get_prime_factor_tree_type():
                 {
                     "base": "enum",
                     "name": "mod_three",
-                    "options": ["one", "two", "three"]
+                    "options": ["zero", "one", "two"]
                 },
                 {
                     "base": "optional",
@@ -50,8 +45,13 @@ class PrimeFactorTree:
         self.left = left
         self.right = right
 
-        self.mod_three = [0, 0, 0]
-        self.mod_three[int(self.value) % 3] = 1
+        mod_three_int = int(self.value) % 3
+        if mod_three_int == 0:
+            self.mod_three = "zero"
+        elif mod_three_int == 1:
+            self.mod_three = "one"
+        elif mod_three_int == 2:
+            self.mod_three = "two"
 
     def __str__(self):
         if self.left is None and self.right is None:
@@ -80,8 +80,24 @@ class PrimeFactorTree:
             self.left.pow_e()
             self.right.pow_e()
 
+    def to_dict(self) -> dict:
+        value = {
+            "value": self.value,
+            "mod_three": self.mod_three,
+            "left": {},
+            "right": {}
+        }
 
-def get_trees(args) -> [PrimeFactorTree]:
+        if self.left is not None:
+            value["left"] = self.left.to_dict()
+
+        if self.right is not None:
+            value["right"] = self.right.to_dict()
+
+        return value
+
+
+def get_trees(args) -> [dict]:
     trees = [__get_prime_factor_tree(x) for x in range(2, args.num_data + 2)]
 
     if args.normalize_factor is not None:
@@ -92,166 +108,7 @@ def get_trees(args) -> [PrimeFactorTree]:
         for tree in trees:
             tree.log()
 
-    return trees
-
-
-def update_state_stack(
-        stack: state_stack.StateStack,
-        hidden_vector: tf.Tensor,
-        output: tf.Tensor) -> (state_stack.StateStack, tf.Tensor):
-
-    state, popped_hidden_vector, stack = state_stack.pop(stack)
-
-    def get_should_return_value(_state):
-        return tf.constant(_state is not None)
-
-    def create_pred(start_state: str, other_preds: tf.Tensor=None) -> tf.Tensor:
-        state_pred = tf.equal(state, state_encoder.encode(start_state))
-
-        if other_preds is None:
-            return state_pred
-        elif other_preds.get_shape().ndims == 0:
-            return tf.logical_and(state_pred, other_preds)
-        else:
-            return tf.logical_and(state_pred, tf.reduce_all(other_preds))
-
-    def create_transition_pred_fn(start_state: str, next_state: str=None, other_preds: tf.Tensor=None):
-        new_stack = stack
-
-        if next_state is not None:
-            new_stack = state_stack.push(new_stack, state_encoder.encode(next_state), hidden_vector)
-
-        return \
-            create_pred(start_state, other_preds), \
-            lambda: (*new_stack, get_should_return_value(next_state))
-
-    def create_new_object_transition_pred_fn(
-            start_state: str, next_child_state: str, next_state: str=None, other_preds: tf.Tensor=None):
-
-        def fn():
-            new_stack = stack
-
-            if next_state is not None:
-                new_stack = state_stack.push(new_stack, state_encoder.encode(next_state), hidden_vector)
-
-            new_stack = state_stack.push(new_stack, state_encoder.encode(next_child_state), hidden_vector)
-
-            return (*new_stack, get_should_return_value(next_state))
-
-        return create_pred(start_state, other_preds), fn
-
-    tensor, element_count, should_return_value = tf.case(
-        pred_fn_pairs=[
-            create_transition_pred_fn("value", "mod_three"),
-            create_transition_pred_fn("mod_three", "left_opt"),
-            create_new_object_transition_pred_fn("left_opt", "value", "right_opt", other_preds=tf.greater_equal(output[0], 0.5)),
-            create_transition_pred_fn("left_opt", "right_opt", other_preds=tf.less(output[0], 0.5)),
-            create_new_object_transition_pred_fn("right_opt", "value", other_preds=tf.greater_equal(output[0], 0.5)),
-            create_transition_pred_fn("right_opt", other_preds=tf.less(output[0], 0.5))
-        ],
-        default=lambda: (*stack, get_should_return_value(None)),
-        exclusive=True)
-
-    # TODO: Is this the best place to do this? Should this function be more abstract?
-    tensor = tf.reshape(tensor, tf.shape(stack[0]))
-
-    return_value = tf.cond(
-        should_return_value,
-        # The return value is the popped hidden vector
-        lambda: popped_hidden_vector,
-        # Else return a `tf.Tensor` of NaNs
-        # TODO: Check for other ways of representing the absence of a `tf.Tensor`
-        lambda: tf.constant(np.nan, dtype=tf.float32, shape=[state_stack.get_hidden_vector_size(stack)]))
-
-    return (tensor, element_count), return_value
-
-
-def tree_to_array(tree: PrimeFactorTree, args) -> [(int, [int])]:
-    array = []
-
-    array.append((state_encoder.encode("value"), __outputs_to_numbers([tree.value])))
-    array.append((state_encoder.encode("mod_three"), __outputs_to_numbers(tree.mod_three)))
-
-    array.append((state_encoder.encode("left_opt"), __outputs_to_numbers([tree.left is not None])))
-    if tree.left is not None:
-        array.extend(tree_to_array(tree.left, args))
-
-    array.append((state_encoder.encode("right_opt"), __outputs_to_numbers([tree.right is not None])))
-    if tree.right is not None:
-        array.extend(tree_to_array(tree.right, args))
-
-    return array
-
-
-def array_to_tree(initial_array: [(int, [int])], args) -> PrimeFactorTree:
-    def get_subtree(_array, choice_state: int) -> (PrimeFactorTree, [(int, [int])]):
-        _state, _outputs = next(_array)
-        assert _state == choice_state
-        assert len(_outputs) == 1
-
-        # Peek at what's next in `array`, but place back in
-        next_state, next_outputs = next(_array)
-        _array = itertools.chain([(next_state, next_outputs)], _array)
-
-        if next_state == state_encoder.encode("value"):
-            return get_tree(_array)
-        else:
-            return None, _array
-
-    def get_tree(array: [(int, [int])]) -> (PrimeFactorTree, [(int, [int])]):
-        try:
-            state, outputs = next(array)
-        except StopIteration:
-            return None
-
-        assert state == state_encoder.encode("value")
-        assert len(outputs) == 1
-        value = outputs[0]
-
-        state, outputs = next(array)
-        assert state == state_encoder.encode("mod_three")
-        assert len(outputs) == 3
-        mod_three = outputs
-
-        left, array = get_subtree(array, state_encoder.encode("left_opt"))
-
-        try:
-            right, array = get_subtree(array, state_encoder.encode("right_opt"))
-        except StopIteration:
-            right = None
-
-        final_tree = PrimeFactorTree(value, left, right)
-        final_tree.mod_three = mod_three
-
-        return final_tree, array
-
-    # Ensure that `array` is a generator
-    if not isinstance(initial_array, GeneratorType):
-        initial_array = iter(initial_array)
-
-    tree, _ = get_tree(initial_array)
-
-    if args.normalize_factor is not None:
-        tree.multiply(args.normalize_factor)
-
-    if args.log_normalize:
-        tree.pow_e()
-
-    return tree
-
-
-def __outputs_to_numbers(outputs: []) -> [float]:
-    def convert(output) -> float:
-        if isinstance(output, bool):
-            return 1.0 if output else 0.0
-        elif isinstance(output, int):
-            return float(output)
-        elif isinstance(output, float):
-            return output
-        else:
-            raise ValueError("Can't convert type to number: %s" % output)
-
-    return [convert(output) for output in outputs]
+    return [tree.to_dict() for tree in trees]
 
 
 def __get_prime_factor_tree(x: int) -> PrimeFactorTree:
