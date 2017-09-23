@@ -1,5 +1,5 @@
 from . import states, state_transition
-from typing import Dict, List, Any, Tuple, Iterator
+from typing import Dict, List, Any, Tuple, Iterator, Callable
 from typing import Type as TypingType
 import itertools
 import json
@@ -243,10 +243,10 @@ class OptionalType(Type):
             state_transition.ChildStateTransition(
                 self.get_initial_state(),
                 self.type.get_initial_state(),
-                other_preds_fn=lambda output: condition_if_exists(output, tf.greater_equal(output[0], 0.5))),
+                other_preds_fn=lambda output: condition_if_exists(output, lambda: tf.greater_equal(output[0], 0.5))),
             state_transition.InnerStateTransition(
                 self.get_initial_state(),
-                other_preds_fn=lambda output: condition_if_exists(output, tf.less(output[0], 0.5)))]
+                other_preds_fn=lambda output: condition_if_exists(output, lambda: tf.less(output[0], 0.5)))]
 
     def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
         value_is_empty = value == {}
@@ -456,7 +456,7 @@ def create_from_dict(json_object: dict) -> List[Type]:
     return all_types
 
 
-def condition_if_exists(output: tf.Tensor, condition: tf.Tensor) -> tf.Tensor:
+def condition_if_exists(output: tf.Tensor, condition: Callable[[], tf.Tensor]) -> tf.Tensor:
     """
     Perform the condition `condition` on `output` if output is not empty
     If `output` is empty, return false
@@ -467,4 +467,4 @@ def condition_if_exists(output: tf.Tensor, condition: tf.Tensor) -> tf.Tensor:
     return tf.cond(
         pred=tf.reduce_all(tf.equal(tf.shape(output), [])),
         fn1=lambda: tf.constant(False),
-        fn2=lambda: condition)
+        fn2=condition)
