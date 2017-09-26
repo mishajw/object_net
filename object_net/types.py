@@ -356,6 +356,7 @@ class ObjectType(Type):
 
         return value
 
+
 class ReferenceType(Type):
     def __init__(self, name: str):
         super().__init__(name, [])
