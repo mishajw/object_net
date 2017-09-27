@@ -1,5 +1,5 @@
 from . import states, state_transition
-from typing import Dict, List, Any, Tuple, Iterator, Callable
+from typing import Dict, List, Any, Tuple, Iterator, Callable, Optional
 from typing import Type as TypingType
 import itertools
 import json
@@ -101,6 +101,9 @@ class Type:
 
     def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
         raise NotImplementedError()
+
+    def can_flatten(self):
+        return True
 
 
 TypeDict = Dict[str, Type]
@@ -356,6 +359,9 @@ class ObjectType(Type):
 
         return value
 
+    def can_flatten(self):
+        return False
+
 
 class ReferenceType(Type):
     def __init__(self, name: str):
@@ -385,6 +391,75 @@ class ReferenceType(Type):
 
     def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
         raise TypeError("Can't get value from state output pairs on a reference type")
+
+
+class FlattenType(Type):
+    def __init__(self, name: str, _type: Type, return_state: Optional[states.State]):
+        assert _type.can_flatten()
+
+        self.state_dict = dict([(state, state.copy()) for state in _type.states])
+        for child_state in self.state_dict:
+            _state = self.state_dict[child_state]
+            _state.name = "%s[%s]" % (child_state.name, _state)
+
+        super().__init__(name, list(self.state_dict.values()))
+        self.type = _type
+        self.return_state = return_state
+
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
+        child_state_output_pairs = self.type.get_state_output_pairs(value)
+        state_output_pairs = []
+
+        for state, output in child_state_output_pairs:
+            matching_states = list(filter(lambda s: s.id == state, self.state_dict.keys()))
+
+            if len(matching_states) == 0:
+                state_output_pairs.append((state, output))
+            elif len(matching_states) == 1:
+                new_state = self.state_dict[matching_states[0]]
+                state_output_pairs.append((new_state.id, output))
+
+        return state_output_pairs
+
+    @classmethod
+    def from_json(cls, json_object):
+        raise TypeError()
+
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
+        child_state_transitions = self.type.get_state_transitions()
+        state_transitions = []
+
+        def replace_state(state: states.State):
+            if state in self.state_dict.keys():
+                return self.state_dict[state]
+            else:
+                return state
+
+        # Copy the child's state transitions but replace with our states
+        for child_state_transition in child_state_transitions:
+            if isinstance(child_state_transition, state_transition.InnerStateTransition):
+                state_transitions.append(state_transition.InnerStateTransition(
+                    replace_state(child_state_transition.initial_state),
+                    replace_state(child_state_transition.next_state),
+                    child_state_transition.other_preds_fn))
+            elif isinstance(child_state_transition, state_transition.ChildStateTransition):
+                state_transitions.append(state_transition.ChildStateTransition(
+                    replace_state(child_state_transition.initial_state),
+                    replace_state(child_state_transition.new_child_state),
+                    replace_state(child_state_transition.next_inner_state),
+                    child_state_transition.other_preds_fn))
+
+        # Make the last transition go to the return state
+        if len(state_transitions) > 1:
+            state_transitions[-1].next_state = self.return_state
+
+        return state_transitions
+
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
+        pass
+
+    def validate(self, value):
+        pass
 
 
 class UnknownReferenceError(RuntimeError):

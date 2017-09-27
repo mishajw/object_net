@@ -41,6 +41,9 @@ class State:
     def __str__(self):
         return "State(%s, %d)" % (self.name, self.id)
 
+    def copy(self):
+        return State(self.name, self.num_outputs, self.output_type)
+
 
 class StateEncoder:
     """Encode states strings into integers for NumPy arrays"""
