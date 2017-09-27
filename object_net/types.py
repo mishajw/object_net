@@ -249,7 +249,7 @@ class OptionalType(Type):
                 other_preds_fn=lambda output: condition_if_exists(output, lambda: tf.less(output[0], 0.5)))]
 
     def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
-        value_is_empty = value == {}
+        value_is_empty = value is None
 
         optional_state = (self.get_initial_state().id, [0.0 if value_is_empty else 1.0])
 
@@ -265,7 +265,7 @@ class OptionalType(Type):
         assert len(output) == 1
 
         if output[0] < 0.5:
-            return {}
+            return None
         else:
             return self.type.get_value_from_state_output_pairs(state_output_pairs)
 

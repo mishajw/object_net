@@ -16,6 +16,7 @@ def example():
         "--config", is_config_file=True, default="./object_net.ini", help="Path of ini configuration file")
     parser.add_argument("--hidden_vector_length", type=int, default=64)
     parser.add_argument("--fully_connected_sizes", type=str, default="256,256")
+    parser.add_argument("--log_normalize", type=bool, default=False)
     tf_utils.generic_runner.add_arguments(parser)
     tf_utils.data_holder.add_arguments(parser)
     prime_factors.add_arguments(parser)
@@ -25,6 +26,8 @@ def example():
     print("Generating data...")
     tree_type = prime_factors.get_prime_factor_tree_type()
     trees = prime_factors.get_trees(args)
+    if args.log_normalize:
+        [prime_factors.log_normalise_tree(tree) for tree in trees]
     arrays = [list(tree_type.get_state_output_pairs(tree)) for tree in trees]
     random.shuffle(arrays)
     padded_arrays = padder.PaddedData.from_unpadded(arrays)
@@ -39,7 +42,7 @@ def example():
 
     with tf.variable_scope("truth_initial_hidden_vector_input"):
         truth_initial_hidden_vector_input = tf.reshape(
-            tf.slice(truth_padded_data.outputs_padded, [0, 0, 0], [-1, 1, 1]),
+            tf.slice(truth_padded_data.outputs_padded, [0, 1, 0], [-1, 1, 1]),
             [-1])
 
     def get_object_net_writer(training: bool) -> object_net_writer.ObjectNetWriter:
@@ -100,17 +103,20 @@ def example():
             generated_step_counts, generated_outputs_counts_padded, generated_states_padded, generated_outputs_padded)
         unpadded = padder.unpad(copied_testing_input)
 
-        def try_array_to_tree(_array, _args):
+        def try_array_to_tree(_array):
             try:
-                return prime_factors.array_to_tree(_array, _args)
+                return tree_type.get_value_from_state_output_pairs(_array)
             except StopIteration:
-                return prime_factors.PrimeFactorTree(-1, None, None)
+                return prime_factors.create_tree(-1, None, None)
 
-        generated_trees = [try_array_to_tree(array, args) for array in unpadded]
+        generated_trees = [try_array_to_tree(array) for array in unpadded]
 
         print("Trees:")
         for tree, number in list(zip(generated_trees, current_initial_hidden_vector_input)):
-            number = math.pow(math.e, number)
+            if args.log_normalize:
+                number = math.pow(math.e, number)
+                prime_factors.log_unnormalise_tree(tree)
+
             print("%d -> %s" % (round(number), tree))
 
         print("Raw unpadded data:")
