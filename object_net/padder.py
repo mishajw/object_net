@@ -62,6 +62,10 @@ def pad(data: [[(int, [float])]]) -> (np.array, np.array, np.array, np.array):
         4) A list of padded lists of padded lists of outputs
     """
 
+    # Cast to list in the case of the data being a generator
+    data = list(data)
+    data = [list(d) for d in data]
+
     # Separate out the states and the outputs
     batch_states = []
     batch_outputs = []
