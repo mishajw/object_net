@@ -36,12 +36,14 @@ class HiddenVectorNetwork:
             state: states.State) -> (tf.Tensor, tf.Tensor):
         raise NotImplementedError()
 
+    def get_hidden_vector_size(self) -> int:
+        raise NotImplementedError()
+
 
 class LstmHiddenVectorNetwork(HiddenVectorNetwork):
-    def __init__(self, hidden_vector_size: int, num_layers: int, hidden_vector_combiner: HiddenVectorCombiner):
+    def __init__(self, layer_size: int, num_layers: int, hidden_vector_combiner: HiddenVectorCombiner):
         self.num_layers = num_layers
-        self.total_hidden_vector_size = hidden_vector_size
-        self.layer_hidden_vector_size = self.total_hidden_vector_size / self.num_layers
+        self.layer_size = layer_size
         self.hidden_vector_combiner = hidden_vector_combiner
 
     def __call__(
@@ -56,7 +58,7 @@ class LstmHiddenVectorNetwork(HiddenVectorNetwork):
 
         layer_hidden_vectors = tf.split(total_hidden_vector, self.num_layers)
 
-        current_input = tf.zeros(self.layer_hidden_vector_size / 2)
+        current_input = tf.zeros(self.layer_size / 2)
 
         next_hidden_vector_pieces = []
 
@@ -72,7 +74,7 @@ class LstmHiddenVectorNetwork(HiddenVectorNetwork):
         with tf.variable_scope("make_choice_%s" % tf_utils.format_for_scope(state.name)):
             weights = tf_utils.try_create_scoped_variable(
                 name="weights",
-                shape=[self.layer_hidden_vector_size / 2, state.num_outputs],
+                shape=[self.layer_size / 2, state.num_outputs],
                 dtype=tf.float32,
                 initializer=tf.random_normal_initializer())
 
@@ -101,16 +103,19 @@ class LstmHiddenVectorNetwork(HiddenVectorNetwork):
 
         return next_hidden_vector, current_choice
 
+    def get_hidden_vector_size(self) -> int:
+        return self.layer_size * self.num_layers
+
     def __lstm(self, layer_input: tf.Tensor, h_in: tf.Tensor, c_in: tf.Tensor) -> (tf.Tensor, tf.Tensor, tf.Tensor):
         weights_lstm = tf_utils.try_create_scoped_variable(
             name="weights",
-            shape=[self.layer_hidden_vector_size, self.layer_hidden_vector_size * 2],
+            shape=[self.layer_size, self.layer_size * 2],
             dtype=tf.float32,
             initializer=tf.random_normal_initializer())
 
         biases_lstm = tf_utils.try_create_scoped_variable(
             name="biases",
-            shape=[self.layer_hidden_vector_size * 2],
+            shape=[self.layer_size * 2],
             dtype=tf.float32,
             initializer=tf.zeros_initializer())
 

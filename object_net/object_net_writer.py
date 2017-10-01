@@ -17,7 +17,6 @@ class ObjectNetWriter:
             self,
             truth_padded_data: padder.PlaceholderPaddedData,
             initial_hidden_vector_input: tf.Tensor,
-            hidden_vector_size: int,
             object_type: types.Type,
             training: bool, # TODO: rename
             hidden_vector_network: object_net_components.HiddenVectorNetwork):
@@ -25,12 +24,11 @@ class ObjectNetWriter:
         Initialise TensorFlow graph
         :param truth_padded_data: the input data
         :param initial_hidden_vector_input: the inputs for each example in the batch
-        :param hidden_vector_size: size of hidden vectors
         :param object_type: the object type we are writing
         :param training: true if training
         :param hidden_vector_network: the network to run when passing through hidden vectors
         """
-        self.hidden_vector_size = hidden_vector_size
+        self.hidden_vector_size = hidden_vector_network.get_hidden_vector_size()
         self.object_type = object_type
         self.training = training
         self.hidden_vector_network = hidden_vector_network
