@@ -357,6 +357,62 @@ class ObjectType(Type):
         return value
 
 
+class ListType(Type):
+    def __init__(self, _type: Type):
+        name = "list[%s]" % _type.name
+        self.state = states.State(name, num_outputs=1, output_type=states.OutputType.BOOL)
+        super().__init__(name, [self.state])
+        self.type = _type
+
+    def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
+        assert isinstance(value, list)
+
+        for item in value:
+            yield (self.state.id, [1])
+            yield from self.type.get_state_output_pairs(item)
+
+        yield (self.state.id, [0])
+
+    def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
+        for state, output in state_output_pairs:
+            assert state == self.state.id
+
+            if output[0] >= 0.5:
+                yield self.type.get_value_from_state_output_pairs(state_output_pairs)
+            else:
+                break
+
+    @classmethod
+    def from_json(cls, json_object):
+        assert_string_exists(json_object, "type")
+
+        return ListType(ReferenceType(json_object["type"]))
+
+    def get_state_transitions(self) -> List[state_transition.StateTransition]:
+        return [
+            state_transition.ChildStateTransition(
+                self.state,
+                self.type.get_initial_state(),
+                self.state,
+                other_preds_fn=lambda output: tf.greater_equal(output[0], 0.5)),
+            state_transition.InnerStateTransition(
+                self.state, other_preds_fn=lambda output: tf.less(output[0], 0.5))]
+
+    def validate(self, value):
+        pass
+
+    def get_child_keys(self) -> iter:
+        return [None]
+
+    def get_child_type(self, key) -> "Type":
+        assert key is None
+        return self.type
+
+    def set_child_type(self, key, value):
+        assert key is None
+        self.type = value
+
+
 class ReferenceType(Type):
     def __init__(self, name: str):
         super().__init__(name, [])
@@ -443,6 +499,8 @@ def create_from_dict(json_object: dict) -> List[Type]:
                 yield OptionalType.from_json(type_object)
             elif base == "object":
                 yield ObjectType.from_json(type_object)
+            elif base == "list":
+                yield ListType.from_json(type_object)
 
     # Get types
     all_types = list(get_types())
