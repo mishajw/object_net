@@ -71,7 +71,8 @@ class ObjectNetWriter:
 
             with tf.variable_scope("initial_hidden_vector"):
                 current_initial_hidden_vector_input = initial_hidden_vector_input[step]
-                current_hidden_vector = tf.fill([self.hidden_vector_size], value=current_initial_hidden_vector_input)
+                current_hidden_vector = self.__create_fully_connected_layers(
+                    current_initial_hidden_vector_input, [self.hidden_vector_size])
 
             current_states_ta, current_outputs_ta, current_outputs_counts_ta, current_step_count = \
                 self.__step_while_loop(
