@@ -20,9 +20,9 @@ class AdditionHiddenVectorCombiner(HiddenVectorCombiner):
             inner_hidden_vector: tf.Tensor) -> tf.Tensor:
 
         all_hidden_vectors = tf.cond(
-            pred=tf.reduce_any(tf.is_nan(child_hidden_vector)),
-            fn1=lambda: tf.concat([[parent_hidden_vector], [inner_hidden_vector]], axis=0),
-            fn2=lambda: tf.concat([[parent_hidden_vector], [child_hidden_vector], [inner_hidden_vector]], axis=0))
+            tf.reduce_any(tf.is_nan(child_hidden_vector)),
+            lambda: tf.concat([[parent_hidden_vector], [inner_hidden_vector]], axis=0),
+            lambda: tf.concat([[parent_hidden_vector], [child_hidden_vector], [inner_hidden_vector]], axis=0))
 
         return tf.reduce_sum(all_hidden_vectors, axis=0)
 
