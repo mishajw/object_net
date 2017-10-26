@@ -274,10 +274,10 @@ class ObjectNetWriter:
     @staticmethod
     def __get_cost(truth_outputs_padded, generated_outputs_padded):
         with tf.variable_scope("cost"):
-            tf.assert_equal(tf.shape(truth_outputs_padded), tf.shape(generated_outputs_padded))
-
-            return tf.sqrt(
-                tf.reduce_mean(tf.square(tf.abs(truth_outputs_padded - generated_outputs_padded))), name="cost")
+            with tf.control_dependencies([
+                    tf.assert_equal(tf.shape(truth_outputs_padded), tf.shape(generated_outputs_padded))]):
+                return tf.sqrt(
+                    tf.reduce_mean(tf.square(tf.abs(truth_outputs_padded - generated_outputs_padded))), name="cost")
 
     @staticmethod
     def __pad_ta_elements(ta: tf.TensorArray, size: int) -> tf.TensorArray:
