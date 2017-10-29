@@ -50,7 +50,7 @@ class ObjectNetWriter:
         self.generated_outputs_counts_padded = generated_outputs_counts_padded_ta.stack()
         self.generated_step_counts = generated_step_counts_ta.stack()
 
-        self.cost = self.__get_cost(truth_padded_data.outputs_padded, self.generated_outputs_padded)
+        self.cost = tf_utils.get_rms_error(truth_padded_data.outputs_padded, self.generated_outputs_padded)
 
     def __batch_while_loop(
             self,
@@ -287,14 +287,6 @@ class ObjectNetWriter:
             lambda: tf.constant(np.nan, dtype=tf.float32, shape=[state_stack.get_hidden_vector_size(stack)]))
 
         return (tensor, element_count), return_value
-
-    @staticmethod
-    def __get_cost(truth_outputs_padded, generated_outputs_padded):
-        with tf.variable_scope("cost"):
-            with tf.control_dependencies([
-                    tf.assert_equal(tf.shape(truth_outputs_padded), tf.shape(generated_outputs_padded))]):
-                return tf.sqrt(
-                    tf.reduce_mean(tf.square(tf.abs(truth_outputs_padded - generated_outputs_padded))), name="cost")
 
     @staticmethod
     def __create_fully_connected_layers(initial_input: tf.Tensor, sizes: [int]):
