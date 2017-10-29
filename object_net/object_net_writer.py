@@ -79,7 +79,7 @@ class ObjectNetWriter:
                 current_outputs_counts = tf.gather(
                     truth_padded_data.outputs_counts, step, name="current_outputs_counts")
 
-                current_states_ta, current_outputs_ta, current_outputs_counts_ta, current_step_count = \
+                current_states, current_outputs, current_outputs_counts, current_step_count = \
                     self.__step_while_loop(
                         current_step_count,
                         current_outputs_padded,
@@ -88,9 +88,9 @@ class ObjectNetWriter:
 
             return \
                 step + 1, \
-                batch_states_ta.write(step, current_states_ta.stack("stack_batch_states"), "write_batch_states"), \
-                batch_outputs_ta.write(step, current_outputs_ta.stack("stack_batch_outputs"), "write_batch_outputs"), \
-                batch_outputs_counts_ta.write(step, current_outputs_counts_ta.stack(), "write_batch_outputs_counts"), \
+                batch_states_ta.write(step, current_states, "write_batch_states"), \
+                batch_outputs_ta.write(step, current_outputs, "write_batch_outputs"), \
+                batch_outputs_counts_ta.write(step, current_outputs_counts, "write_batch_outputs_counts"), \
                 batch_step_counts_ta.write(step, current_step_count, "write_step_counts")
 
         def cond(step, *_):
@@ -210,13 +210,16 @@ class ObjectNetWriter:
         initial_stack = state_stack.create(max_size=self.max_steps, hidden_vector_size=self.hidden_vector_size)
         initial_stack = state_stack.push(initial_stack, self.object_type.get_initial_state().id, initial_hidden_vector)
 
+        # If we're training we know the output sizes and don't need larger than necessary `TensorArray`s
+        output_sizes = step_count if self.training else self.max_steps
+
         # Create the `tf.TensorArray` to hold all outputs
         initial_states_ta = tf.TensorArray(
-            dtype=tf.float32, size=self.max_steps, name="initial_states_ta")
+            dtype=tf.float32, size=output_sizes, name="initial_states_ta")
         initial_outputs_ta = tf.TensorArray(
-            dtype=tf.float32, size=self.max_steps, name="initial_outputs_ta")
+            dtype=tf.float32, size=output_sizes, name="initial_outputs_ta")
         initial_outputs_counts_ta = tf.TensorArray(
-            dtype=tf.int32, size=self.max_steps, name="initial_outputs_counts_ta")
+            dtype=tf.int32, size=output_sizes, name="initial_outputs_counts_ta")
 
         initial_return_value = tf.constant(np.nan, dtype=tf.float32, shape=[self.hidden_vector_size])
 
@@ -249,7 +252,11 @@ class ObjectNetWriter:
             final_outputs_ta = tf_utils.resize_tensor_array(final_outputs_ta, final_step)
             final_outputs_counts_ta = tf_utils.resize_tensor_array(final_outputs_counts_ta, final_step)
 
-        return final_states_ta, final_outputs_ta, final_outputs_counts_ta, final_step
+        return \
+            self.__stack_and_pad(final_states_ta, self.max_steps), \
+            self.__stack_and_pad(final_outputs_ta, self.max_steps), \
+            self.__stack_and_pad(final_outputs_counts_ta, self.max_steps), \
+            final_step
 
     def __update_state_stack(
             self,
@@ -312,3 +319,17 @@ class ObjectNetWriter:
                 current_input = tf.sigmoid(current_input)
 
         return current_input
+
+    @staticmethod
+    def __stack_and_pad(tensor_array: tf.TensorArray, length: int):
+        stacked = tensor_array.stack()
+        stacked_shape = tf.shape(stacked)
+        padding_size = length - stacked_shape[0]
+        stacked_shape_tail = stacked_shape[1:]
+        padding = tf.zeros(
+            tf.concat([[padding_size], stacked_shape_tail], axis=0),
+            dtype=tensor_array.dtype,
+            name="tensor_array_padding")
+
+        return tf.concat([stacked, padding], axis=0)
+
