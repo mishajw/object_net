@@ -1,4 +1,5 @@
 from . import states
+from typing import List
 import tensorflow as tf
 import tf_utils
 
@@ -38,6 +39,35 @@ class HiddenVectorNetwork:
 
     def get_hidden_vector_size(self) -> int:
         raise NotImplementedError()
+
+
+class FullyConnectedHiddenVectorNetwork(HiddenVectorNetwork):
+    def __init__(self, layer_sizes: List[int], hidden_vector_size: int, hidden_vector_combiner: HiddenVectorCombiner):
+        self.layer_sizes = layer_sizes
+        self.hidden_vector_size = hidden_vector_size
+        self.hidden_vector_combiner = hidden_vector_combiner
+
+    def __call__(
+            self, parent_hidden_vector: tf.Tensor,
+            child_hidden_vector: tf.Tensor,
+            inner_hidden_vector: tf.Tensor,
+            state: states.State) -> (tf.Tensor, tf.Tensor):
+
+        with tf.variable_scope("make_choice_%s" % tf_utils.format_for_scope(state.name)):
+            hidden_vector = self.hidden_vector_combiner(parent_hidden_vector, child_hidden_vector, inner_hidden_vector)
+
+            final_activations = tf.squeeze(tf_utils.get_fully_connected_layers(
+                tf.expand_dims(hidden_vector, axis=0),
+                self.layer_sizes + [self.hidden_vector_size + state.num_outputs], tf.tanh), axis=0)
+
+            next_hidden_vector, output = tf.split(final_activations, [self.hidden_vector_size, state.num_outputs])
+
+            output = state.format_tensor(output)
+
+        return next_hidden_vector, output
+
+    def get_hidden_vector_size(self) -> int:
+        return self.hidden_vector_size
 
 
 class LstmHiddenVectorNetwork(HiddenVectorNetwork):
@@ -86,18 +116,7 @@ class LstmHiddenVectorNetwork(HiddenVectorNetwork):
 
             current_choice = tf.squeeze(tf.matmul(tf.expand_dims(current_input, axis=0), weights) + biases, axis=0)
 
-            if state.output_type == states.OutputType.BOOL:
-                current_choice = tf.sigmoid(current_choice)
-            elif state.output_type == states.OutputType.SIGNED:
-                current_choice = tf.tanh(current_choice)
-            elif state.output_type == states.OutputType.REAL:
-                # Output is already in the range of real numbers
-                pass
-            elif state.output_type == states.OutputType.NONE:
-                # Output does not exist therefore doesn't need editing
-                pass
-            else:
-                raise ValueError("Output type is not recognised in state %s: %s" % (state, state.output_type))
+        current_choice = state.format_tensor(current_choice)
 
         next_hidden_vector = tf.concat(next_hidden_vector_pieces, axis=0)
 

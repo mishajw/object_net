@@ -38,5 +38,25 @@ class State:
         for i, state in enumerate(states):
             state.id = i
 
+    def format_tensor(self, tensor: tf.Tensor):
+        """
+        Format a tensor to be in the correct ranges for the type of this state - for example, if the output type is
+        boolean, the tensor will be formatted to be in the range 0-1
+        :param tensor: the tensor to format
+        :return: the formatted tensor of the same shape
+        """
+        if self.output_type == OutputType.BOOL:
+            return tf.sigmoid(tensor)
+        elif self.output_type == OutputType.SIGNED:
+            return tf.tanh(tensor)
+        elif self.output_type == OutputType.REAL:
+            # Output is already in the range of real numbers
+            return tensor
+        elif self.output_type == OutputType.NONE:
+            # Output does not exist therefore doesn't need editing
+            return tensor
+        else:
+            raise ValueError("Output type is not recognised in state %s: %s" % (self, self.output_type))
+
     def __str__(self):
         return "State(%s, %d)" % (self.name, self.id)
