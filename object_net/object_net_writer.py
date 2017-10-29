@@ -34,24 +34,20 @@ class ObjectNetWriter:
         self.hidden_vector_network = hidden_vector_network
 
         self.max_steps = tf.shape(truth_padded_data.states_padded)[1]
+        self.max_outputs = tf.shape(truth_padded_data.outputs_padded)[2]
 
         num_batches = truth_padded_data.batch_size
 
-        generated_states_padded_ta, \
-            generated_outputs_padded_ta, \
-            generated_outputs_counts_padded_ta, \
-            generated_step_counts_ta = self.__batch_while_loop(
-                truth_padded_data, initial_hidden_vector_input, num_batches)
+        with tf.variable_scope("batch_while_loop"):
+            generated_states_padded_ta, \
+                generated_outputs_padded_ta, \
+                generated_outputs_counts_padded_ta, \
+                generated_step_counts_ta = self.__batch_while_loop(
+                    truth_padded_data, initial_hidden_vector_input, num_batches)
 
-        self.generated_states_padded = ObjectNetWriter.__pad_ta_elements(
-            generated_states_padded_ta, self.max_steps).stack()
-
-        self.generated_outputs_padded = ObjectNetWriter.__pad_ta_elements(
-            generated_outputs_padded_ta, self.max_steps).stack()
-
-        self.generated_outputs_counts_padded = ObjectNetWriter.__pad_ta_elements(
-            generated_outputs_counts_padded_ta, self.max_steps).stack()
-
+        self.generated_states_padded = generated_states_padded_ta.stack()
+        self.generated_outputs_padded = generated_outputs_padded_ta.stack()
+        self.generated_outputs_counts_padded = generated_outputs_counts_padded_ta.stack()
         self.generated_step_counts = generated_step_counts_ta.stack()
 
         self.cost = self.__get_cost(truth_padded_data.outputs_padded, self.generated_outputs_padded)
@@ -70,26 +66,32 @@ class ObjectNetWriter:
                 batch_step_counts_ta: tf.TensorArray):
 
             with tf.variable_scope("initial_hidden_vector"):
-                current_initial_hidden_vector_input = initial_hidden_vector_input[step]
+                current_initial_hidden_vector_input = tf.gather(
+                    initial_hidden_vector_input, step, name="current_initial_hidden_vector_input")
                 current_hidden_vector = self.__create_fully_connected_layers(
                     current_initial_hidden_vector_input, [self.hidden_vector_size])
 
-            current_states_ta, current_outputs_ta, current_outputs_counts_ta, current_step_count = \
-                self.__step_while_loop(
-                    truth_padded_data.step_counts[step],
-                    truth_padded_data.outputs_padded[step],
-                    truth_padded_data.outputs_counts[step],
-                    current_hidden_vector)
+            with tf.variable_scope("step_while_loop"):
+                current_step_count = tf.gather(
+                    truth_padded_data.step_counts, step, name="current_step_count")
+                current_outputs_padded = tf.gather(
+                    truth_padded_data.outputs_padded, step, name="current_outputs_padded")
+                current_outputs_counts = tf.gather(
+                    truth_padded_data.outputs_counts, step, name="current_outputs_counts")
+
+                current_states_ta, current_outputs_ta, current_outputs_counts_ta, current_step_count = \
+                    self.__step_while_loop(
+                        current_step_count,
+                        current_outputs_padded,
+                        current_outputs_counts,
+                        current_hidden_vector)
 
             return \
                 step + 1, \
-                batch_states_ta.write(step, current_states_ta.stack()), \
-                batch_outputs_ta.write(
-                    step,
-                    ObjectNetWriter.__pad_ta_elements(
-                        current_outputs_ta, tf.shape(truth_padded_data.outputs_padded)[2]).stack()), \
-                batch_outputs_counts_ta.write(step, current_outputs_counts_ta.stack()), \
-                batch_step_counts_ta.write(step, current_step_count)
+                batch_states_ta.write(step, current_states_ta.stack("stack_batch_states"), "write_batch_states"), \
+                batch_outputs_ta.write(step, current_outputs_ta.stack("stack_batch_outputs"), "write_batch_outputs"), \
+                batch_outputs_counts_ta.write(step, current_outputs_counts_ta.stack(), "write_batch_outputs_counts"), \
+                batch_step_counts_ta.write(step, current_step_count, "write_step_counts")
 
         def cond(step, *_):
             return step < num_batches
@@ -103,11 +105,11 @@ class ObjectNetWriter:
                 body=body,
                 loop_vars=[
                     tf.constant(0),
-                    tf.TensorArray(dtype=tf.float32, size=num_batches),
-                    tf.TensorArray(dtype=tf.float32, size=num_batches),
-                    tf.TensorArray(dtype=tf.int32, size=num_batches),
-                    tf.TensorArray(dtype=tf.int32, size=num_batches)],
-                name="batch_while_loop")
+                    tf.TensorArray(dtype=tf.float32, size=num_batches, name="batch_states_ta"),
+                    tf.TensorArray(dtype=tf.float32, size=num_batches, name="batch_outputs_ta"),
+                    tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_outputs_counts_ta"),
+                    tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_step_counts_ta")],
+                parallel_iterations=50)
 
         return \
             generated_states_padded_ta, \
@@ -167,12 +169,19 @@ class ObjectNetWriter:
                     for i in range(len(self.object_type.get_all_states()))],
                 default=lambda: (hidden_vector, tf.constant(0, dtype=tf.float32) / tf.constant(0, tf.float32)))
 
+            # Zero pad the current choice
+            current_choice = tf.concat(
+                [current_choice, tf.zeros([self.max_outputs - tf.shape(current_choice)[0]])],
+                axis=0,
+                name="current_choice_zero_padded")
+
             # Reshape the hidden vector so we know what size it is
-            next_hidden_vector = tf.reshape(next_hidden_vector, [self.hidden_vector_size])
+            next_hidden_vector = tf.reshape(
+                next_hidden_vector, [self.hidden_vector_size], name="next_hidden_vector_reshaped")
 
             if self.training:
                 # If we're training, the choice we send to the update_state_stack_fn should be determined by the truth
-                stack_update_choice = truth_outputs_padded[step][:truth_outputs_counts[step]]
+                stack_update_choice = tf.gather(truth_outputs_padded, step, name="choice_from_input")
             else:
                 # Otherwise, the choice should be what we outputted
                 stack_update_choice = current_choice
@@ -183,9 +192,9 @@ class ObjectNetWriter:
             return \
                 step + 1, \
                 (*stack), \
-                states_ta.write(step, state), \
-                outputs_ta.write(step, current_choice), \
-                outputs_counts_ta.write(step, num_outputs), \
+                states_ta.write(step, state, "write_state"), \
+                outputs_ta.write(step, current_choice, "write_outputs"), \
+                outputs_counts_ta.write(step, num_outputs, "write_outputs_count"), \
                 return_value
 
         def cond(step, stack_1, stack_2, *_):
@@ -203,11 +212,11 @@ class ObjectNetWriter:
 
         # Create the `tf.TensorArray` to hold all outputs
         initial_states_ta = tf.TensorArray(
-            dtype=tf.float32, size=step_count if self.training else self.max_steps, name="initial_states_ta")
+            dtype=tf.float32, size=self.max_steps, name="initial_states_ta")
         initial_outputs_ta = tf.TensorArray(
-            dtype=tf.float32, size=step_count if self.training else self.max_steps, name="initial_outputs_ta")
+            dtype=tf.float32, size=self.max_steps, name="initial_outputs_ta")
         initial_outputs_counts_ta = tf.TensorArray(
-            dtype=tf.int32, size=step_count if self.training else self.max_steps, name="initial_outputs_counts_ta")
+            dtype=tf.int32, size=self.max_steps, name="initial_outputs_counts_ta")
 
         initial_return_value = tf.constant(np.nan, dtype=tf.float32, shape=[self.hidden_vector_size])
 
@@ -229,7 +238,8 @@ class ObjectNetWriter:
                 tf.TensorShape(None),
                 tf.TensorShape(None),
                 tf.TensorShape([self.hidden_vector_size])],
-            name="step_while_loop")
+            name="step_while_loop",
+            parallel_iterations=50)
 
         # If in test mode, we don't know the amount of steps we will execute. So we need to resize the `tf.TensorArray`
         # to match the actual output
@@ -278,25 +288,6 @@ class ObjectNetWriter:
                     tf.assert_equal(tf.shape(truth_outputs_padded), tf.shape(generated_outputs_padded))]):
                 return tf.sqrt(
                     tf.reduce_mean(tf.square(tf.abs(truth_outputs_padded - generated_outputs_padded))), name="cost")
-
-    @staticmethod
-    def __pad_ta_elements(ta: tf.TensorArray, size: int) -> tf.TensorArray:
-        with tf.variable_scope("pad_ta_elements"):
-            def body(step, padded_ta):
-                current = ta.read(step)
-                padding_shape = tf.concat([[size - tf.shape(current)[0]], tf.shape(current)[1:]], axis=0)
-                current_padded = tf.concat([current, tf.zeros(padding_shape, dtype=ta.dtype)], axis=0)
-
-                padded_ta = padded_ta.write(step, current_padded)
-
-                return step + 1, padded_ta
-
-            _, ta = tf.while_loop(
-                cond=lambda step, _: step < ta.size(),
-                body=body,
-                loop_vars=[0, tf.TensorArray(dtype=ta.dtype, size=ta.size())])
-
-            return ta
 
     @staticmethod
     def __create_fully_connected_layers(initial_input: tf.Tensor, sizes: [int]):
