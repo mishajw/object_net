@@ -524,6 +524,6 @@ def condition_if_exists(output: tf.Tensor, condition: Callable[[], tf.Tensor]) -
     :return: a bool typed tensor
     """
     return tf.cond(
-        pred=tf.reduce_all(tf.equal(tf.shape(output), [0])),
-        fn1=lambda: tf.constant(False),
-        fn2=condition)
+        tf.reduce_all(tf.equal(tf.shape(output), [0])),
+        lambda: tf.constant(False),
+        condition)
