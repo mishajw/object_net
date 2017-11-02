@@ -108,8 +108,7 @@ class ObjectNetWriter:
                     tf.TensorArray(dtype=tf.float32, size=num_batches, name="batch_states_ta"),
                     tf.TensorArray(dtype=tf.float32, size=num_batches, name="batch_outputs_ta"),
                     tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_outputs_counts_ta"),
-                    tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_step_counts_ta")],
-                parallel_iterations=50)
+                    tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_step_counts_ta")])
 
         return \
             generated_states_padded_ta, \
@@ -246,8 +245,7 @@ class ObjectNetWriter:
                 tf.TensorShape(None),
                 tf.TensorShape(None),
                 tf.TensorShape([self.hidden_vector_size])],
-            name="step_while_loop",
-            parallel_iterations=50)
+            name="step_while_loop")
 
         # If in test mode, we don't know the amount of steps we will execute. So we need to resize the `tf.TensorArray`
         # to match the actual output
