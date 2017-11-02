@@ -374,13 +374,16 @@ class ListType(Type):
         yield (self.state.id, [0])
 
     def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
-        for state, output in state_output_pairs:
-            assert state == self.state.id
+        def get_values():
+            for state, output in state_output_pairs:
+                assert state == self.state.id
 
-            if output[0] >= 0.5:
-                yield self.type.get_value_from_state_output_pairs(state_output_pairs)
-            else:
-                break
+                if output[0] >= 0.5:
+                    yield self.type.get_value_from_state_output_pairs(state_output_pairs)
+                else:
+                    break
+
+        return list(get_values())
 
     @classmethod
     def from_json(cls, json_object):
