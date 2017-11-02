@@ -142,15 +142,17 @@ class ObjectNetWriter:
                 outputs_counts_ta: tf.TensorArray,
                 return_value: tf.Tensor):
 
+            # stack_1 = tf.Print(stack_1, [step, tf.slice(stack_1, [0, 1], [-1, 2])], "stack: ", summarize=100)
+
             # Rebuild `stack` tuple
             # TODO: Find way to avoid this by putting tuples into `tf.while_loop` arguments
             stack = stack_1, stack_2
 
-            # Peek into stack by popping but not updating `stack`
-            state, hidden_vector, popped_stack = state_stack.pop(stack)
+            # Get the state and hidden vector we have to deal with for this iteration
+            state, hidden_vector, stack = state_stack.pop(stack)
 
             # Get the summary for all hidden vectors excluding this one
-            hidden_vector_summary = state_stack.get_hidden_vector_summary(popped_stack)
+            hidden_vector_summary = state_stack.get_hidden_vector_summary(stack)
 
             # Get the number of outputs for padding
             # TODO: Doing this twice, once here, and once when calling create_guess_layers. Fix this
@@ -186,8 +188,10 @@ class ObjectNetWriter:
                 # Otherwise, the choice should be what we outputted
                 stack_update_choice = current_choice
 
+            # stack = (tf.Print(stack[0], [step, stack[0][:stack_2]], "estack: ", summarize=100), stack[1])
+
             # Update the state stack
-            stack, return_value = self.__update_state_stack(stack, next_hidden_vector, stack_update_choice)
+            stack, return_value = self.__update_state_stack(state, stack, next_hidden_vector, stack_update_choice)
 
             return \
                 step + 1, \
@@ -261,11 +265,10 @@ class ObjectNetWriter:
 
     def __update_state_stack(
             self,
+            state: int,
             stack: state_stack.StateStack,
             hidden_vector: tf.Tensor,
             output: tf.Tensor) -> (state_stack.StateStack, tf.Tensor):
-
-        state, popped_hidden_vector, stack = state_stack.pop(stack)
 
         all_state_transitions = self.object_type.get_all_state_transitions()
         pred_fn_pairs = [_state_transition.get_pred_fn_pair(state, output, stack, hidden_vector)
@@ -282,7 +285,7 @@ class ObjectNetWriter:
         return_value = tf.cond(
             should_return_value,
             # The return value is the popped hidden vector
-            lambda: popped_hidden_vector,
+            lambda: hidden_vector,
             # Else return a `tf.Tensor` of NaNs
             # TODO: Check for other ways of representing the absence of a `tf.Tensor`
             lambda: tf.constant(np.nan, dtype=tf.float32, shape=[state_stack.get_hidden_vector_size(stack)]))
