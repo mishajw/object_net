@@ -10,7 +10,7 @@ class HiddenVectorCombiner:
             parent_hidden_vector: tf.Tensor,
             child_hidden_vector: tf.Tensor,
             inner_hidden_vector: tf.Tensor) -> tf.Tensor:
-        pass
+        raise NotImplementedError()
 
 
 class AdditionHiddenVectorCombiner(HiddenVectorCombiner):
@@ -26,6 +26,21 @@ class AdditionHiddenVectorCombiner(HiddenVectorCombiner):
             lambda: tf.concat([[parent_hidden_vector], [child_hidden_vector], [inner_hidden_vector]], axis=0))
 
         return tf.reduce_sum(all_hidden_vectors, axis=0)
+
+
+class MostRecentHiddenVectorCombiner(HiddenVectorCombiner):
+    def __call__(
+            self,
+            parent_hidden_vector: tf.Tensor,
+            child_hidden_vector: tf.Tensor,
+            inner_hidden_vector: tf.Tensor) -> tf.Tensor:
+
+        # If `child_hidden_vector` is not NaNs, then it is the most recent. Otherwise, `child_hidden_vector` is the most
+        # recent hidden vector
+        return tf.cond(
+            tf.reduce_any(tf.is_nan(child_hidden_vector)),
+            lambda: inner_hidden_vector,
+            lambda: child_hidden_vector)
 
 
 class HiddenVectorNetwork:
