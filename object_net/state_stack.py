@@ -69,9 +69,19 @@ def is_empty(state_stack: StateStack) -> tf.Tensor:
     :param state_stack: the stack to check
     :return: True if there are no items in the stack, false otherwise
     """
+    return check_size(state_stack, 0)
+
+
+def check_size(state_stack: StateStack, size: int) -> tf.Tensor:
+    """
+    Check the current occupied size of a state stack
+    :param state_stack: the state stack to check the size of
+    :param size: the size to check the state stack is
+    :return: true if the state stack's size is equal to `size`
+    """
     _, element_count = state_stack
 
-    return tf.equal(element_count, 0)
+    return tf.equal(element_count, size)
 
 
 def get_hidden_vector_summary(state_stack: StateStack) -> tf.Tensor:

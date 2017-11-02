@@ -204,10 +204,11 @@ class ObjectNetWriter:
             if self.training:
                 return step < step_count
             else:
-                return tf.logical_and(step < self.max_steps, tf.not_equal(state_stack.is_empty(stack), True))
+                return tf.logical_and(step < self.max_steps, tf.not_equal(state_stack.check_size(stack, 1), True))
 
         # Create the initial stack with initial hidden vector and state
         initial_stack = state_stack.create(max_size=self.max_steps, hidden_vector_size=self.hidden_vector_size)
+        initial_stack = state_stack.push(initial_stack, -1, initial_hidden_vector)
         initial_stack = state_stack.push(initial_stack, self.object_type.get_initial_state().id, initial_hidden_vector)
 
         # If we're training we know the output sizes and don't need larger than necessary `TensorArray`s
