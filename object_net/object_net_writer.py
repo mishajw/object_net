@@ -93,8 +93,8 @@ class ObjectNetWriter:
                 batch_states_ta = batch_states_ta.write(step, output_states, "write_batch_states")
                 batch_outputs_ta = batch_outputs_ta.write(step, output_outputs, "write_batch_outputs")
                 batch_outputs_counts_ta = batch_outputs_counts_ta.write(
-                    step, current_outputs_counts, "write_batch_outputs_counts")
-                batch_step_counts_ta = batch_step_counts_ta.write(step, current_step_count, "write_step_counts")
+                    step, output_outputs_counts, "write_batch_outputs_counts")
+                batch_step_counts_ta = batch_step_counts_ta.write(step, output_step_count, "write_step_counts")
 
             return \
                 step + 1, \
