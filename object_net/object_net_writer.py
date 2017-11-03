@@ -123,8 +123,11 @@ class ObjectNetWriter:
                     tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_outputs_counts_ta"),
                     tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_step_counts_ta")])
 
+        # Average the cost across all batches
+        final_cost = tf.divide(final_total_cost, tf.cast(num_batches, dtype=tf.float32))
+
         return \
-            final_total_cost, \
+            final_cost, \
             generated_states_padded_ta, \
             generated_outputs_padded_ta, \
             generated_outputs_counts_padded_ta, \
@@ -282,6 +285,9 @@ class ObjectNetWriter:
                 tf.TensorShape([self.hidden_vector_size])],
             name="step_while_loop")
 
+        # Average the cost across all steps
+        final_cost = tf.divide(final_total_cost, tf.cast(final_step, dtype=tf.float32))
+
         # If in test mode, we don't know the amount of steps we will execute. So we need to resize the `tf.TensorArray`
         # to match the actual output
         # TODO: Check if we can overcome this by using padding
@@ -294,7 +300,7 @@ class ObjectNetWriter:
             final_outputs_ta = self.__stack_and_pad(final_outputs_ta, self.max_steps)
             final_outputs_counts_ta = self.__stack_and_pad(final_outputs_counts_ta, self.max_steps)
 
-        return final_step, final_total_cost, final_states_ta, final_outputs_ta, final_outputs_counts_ta
+        return final_step, final_cost, final_states_ta, final_outputs_ta, final_outputs_counts_ta
 
     def __update_state_stack(
             self,
