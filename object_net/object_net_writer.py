@@ -203,8 +203,11 @@ class ObjectNetWriter:
             with tf.variable_scope("current_cost"):
                 current_cost = tf.reduce_sum(tf.squared_difference(truth_current_choice, current_choice))
                 # Divide by the number of outputs at this step
-                # TODO: Check if tf.cast is needed
-                current_cost = tf.divide(current_cost, tf.cast(num_outputs, dtype=tf.float32))
+                # TODO: Check if we can simplify this
+                current_cost = tf.cond(
+                    tf.equal(num_outputs, 0),
+                    lambda: tf.constant(0, dtype=tf.float32),
+                    lambda: tf.divide(current_cost, tf.cast(num_outputs, dtype=tf.float32)))
 
             if self.training:
                 # If we're training, the choice we send to the update_state_stack_fn should be determined by the truth
