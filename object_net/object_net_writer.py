@@ -39,18 +39,20 @@ class ObjectNetWriter:
         num_batches = truth_padded_data.batch_size
 
         with tf.variable_scope("batch_while_loop"):
-            generated_states_padded_ta, \
+            final_cost, \
+                generated_states_padded_ta, \
                 generated_outputs_padded_ta, \
                 generated_outputs_counts_padded_ta, \
                 generated_step_counts_ta = self.__batch_while_loop(
                     truth_padded_data, initial_hidden_vector_input, num_batches)
 
-        self.generated_states_padded = generated_states_padded_ta.stack()
-        self.generated_outputs_padded = generated_outputs_padded_ta.stack()
-        self.generated_outputs_counts_padded = generated_outputs_counts_padded_ta.stack()
-        self.generated_step_counts = generated_step_counts_ta.stack()
+        if not self.training:
+            self.generated_states_padded = generated_states_padded_ta.stack()
+            self.generated_outputs_padded = generated_outputs_padded_ta.stack()
+            self.generated_outputs_counts_padded = generated_outputs_counts_padded_ta.stack()
+            self.generated_step_counts = generated_step_counts_ta.stack()
 
-        self.cost = tf_utils.get_rms_error(truth_padded_data.outputs_padded, self.generated_outputs_padded)
+        self.cost = final_cost
 
     def __batch_while_loop(
             self,
@@ -60,6 +62,7 @@ class ObjectNetWriter:
 
         def body(
                 step,
+                total_cost: tf.Tensor,
                 batch_states_ta: tf.TensorArray,
                 batch_outputs_ta: tf.TensorArray,
                 batch_outputs_counts_ta: tf.TensorArray,
@@ -79,24 +82,33 @@ class ObjectNetWriter:
                 current_outputs_counts = tf.gather(
                     truth_padded_data.outputs_counts, step, name="current_outputs_counts")
 
-                current_states, current_outputs, current_outputs_counts, current_step_count = \
+                output_step_count, output_cost, output_states, output_outputs, output_outputs_counts = \
                     self.__step_while_loop(
                         current_step_count,
                         current_outputs_padded,
                         current_outputs_counts,
                         current_hidden_vector)
 
+            if not self.training:
+                batch_states_ta = batch_states_ta.write(step, output_states, "write_batch_states")
+                batch_outputs_ta = batch_outputs_ta.write(step, output_outputs, "write_batch_outputs")
+                batch_outputs_counts_ta = batch_outputs_counts_ta.write(
+                    step, current_outputs_counts, "write_batch_outputs_counts")
+                batch_step_counts_ta = batch_step_counts_ta.write(step, current_step_count, "write_step_counts")
+
             return \
                 step + 1, \
-                batch_states_ta.write(step, current_states, "write_batch_states"), \
-                batch_outputs_ta.write(step, current_outputs, "write_batch_outputs"), \
-                batch_outputs_counts_ta.write(step, current_outputs_counts, "write_batch_outputs_counts"), \
-                batch_step_counts_ta.write(step, current_step_count, "write_step_counts")
+                tf.add(total_cost, output_cost), \
+                batch_states_ta, \
+                batch_outputs_ta, \
+                batch_outputs_counts_ta, \
+                batch_step_counts_ta
 
         def cond(step, *_):
             return step < num_batches
 
         *_, \
+            final_total_cost, \
             generated_states_padded_ta, \
             generated_outputs_padded_ta, \
             generated_outputs_counts_padded_ta, \
@@ -104,13 +116,15 @@ class ObjectNetWriter:
                 cond=cond,
                 body=body,
                 loop_vars=[
-                    tf.constant(0),
+                    tf.constant(0, dtype=tf.int32),
+                    tf.constant(0, dtype=tf.float32),
                     tf.TensorArray(dtype=tf.float32, size=num_batches, name="batch_states_ta"),
                     tf.TensorArray(dtype=tf.float32, size=num_batches, name="batch_outputs_ta"),
                     tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_outputs_counts_ta"),
                     tf.TensorArray(dtype=tf.int32, size=num_batches, name="batch_step_counts_ta")])
 
         return \
+            final_total_cost, \
             generated_states_padded_ta, \
             generated_outputs_padded_ta, \
             generated_outputs_counts_padded_ta, \
@@ -136,6 +150,7 @@ class ObjectNetWriter:
                 step: int,
                 stack_1,
                 stack_2,
+                total_cost: tf.TensorArray,
                 states_ta: tf.TensorArray,
                 outputs_ta: tf.TensorArray,
                 outputs_counts_ta: tf.TensorArray,
@@ -180,9 +195,17 @@ class ObjectNetWriter:
             next_hidden_vector = tf.reshape(
                 next_hidden_vector, [self.hidden_vector_size], name="next_hidden_vector_reshaped")
 
+            truth_current_choice = tf.gather(truth_outputs_padded, step, name="truth_current_choice")
+
+            with tf.variable_scope("current_cost"):
+                current_cost = tf.reduce_sum(tf.squared_difference(truth_current_choice, current_choice))
+                # Divide by the number of outputs at this step
+                # TODO: Check if tf.cast is needed
+                current_cost = tf.divide(current_cost, tf.cast(num_outputs, dtype=tf.float32))
+
             if self.training:
                 # If we're training, the choice we send to the update_state_stack_fn should be determined by the truth
-                stack_update_choice = tf.gather(truth_outputs_padded, step, name="choice_from_input")
+                stack_update_choice = truth_current_choice
             else:
                 # Otherwise, the choice should be what we outputted
                 stack_update_choice = current_choice
@@ -192,12 +215,19 @@ class ObjectNetWriter:
             # Update the state stack
             stack, return_value = self.__update_state_stack(state, stack, next_hidden_vector, stack_update_choice)
 
+            # We only need the output if we're not training
+            if not self.training:
+                states_ta = states_ta.write(step, state, "write_state")
+                outputs_ta = outputs_ta.write(step, current_choice, "write_outputs")
+                outputs_counts_ta = outputs_counts_ta.write(step, num_outputs, "write_outputs_count")
+
             return \
                 step + 1, \
                 (*stack), \
-                states_ta.write(step, state, "write_state"), \
-                outputs_ta.write(step, current_choice, "write_outputs"), \
-                outputs_counts_ta.write(step, num_outputs, "write_outputs_count"), \
+                tf.add(total_cost, current_cost), \
+                states_ta, \
+                outputs_ta, \
+                outputs_counts_ta, \
                 return_value
 
         def cond(step, stack_1, stack_2, *_):
@@ -208,6 +238,9 @@ class ObjectNetWriter:
                 return step < step_count
             else:
                 return tf.logical_and(step < self.max_steps, tf.not_equal(state_stack.check_size(stack, 1), True))
+
+        # Create the tensor that keeps track of the total cost
+        initial_total_cost = tf.constant(0, dtype=tf.float32, name="initial_total_cost")
 
         # Create the initial stack with initial hidden vector and state
         initial_stack = state_stack.create(max_size=self.max_steps, hidden_vector_size=self.hidden_vector_size)
@@ -227,12 +260,13 @@ class ObjectNetWriter:
 
         initial_return_value = tf.constant(np.nan, dtype=tf.float32, shape=[self.hidden_vector_size])
 
-        final_step, *_, final_states_ta, final_outputs_ta, final_outputs_counts_ta, _ = tf.while_loop(
+        final_step, *_, final_total_cost, final_states_ta, final_outputs_ta, final_outputs_counts_ta, _ = tf.while_loop(
             cond=cond,
             body=body,
             loop_vars=[
                 0,
                 *initial_stack,
+                initial_total_cost,
                 initial_states_ta,
                 initial_outputs_ta,
                 initial_outputs_counts_ta,
@@ -240,6 +274,7 @@ class ObjectNetWriter:
             shape_invariants=[
                 tf.TensorShape([]),
                 tf.TensorShape([None, self.hidden_vector_size + 1]),
+                tf.TensorShape([]),
                 tf.TensorShape([]),
                 tf.TensorShape(None),
                 tf.TensorShape(None),
@@ -255,11 +290,11 @@ class ObjectNetWriter:
             final_outputs_ta = tf_utils.resize_tensor_array(final_outputs_ta, final_step)
             final_outputs_counts_ta = tf_utils.resize_tensor_array(final_outputs_counts_ta, final_step)
 
-        return \
-            self.__stack_and_pad(final_states_ta, self.max_steps), \
-            self.__stack_and_pad(final_outputs_ta, self.max_steps), \
-            self.__stack_and_pad(final_outputs_counts_ta, self.max_steps), \
-            final_step
+            final_states_ta = self.__stack_and_pad(final_states_ta, self.max_steps)
+            final_outputs_ta = self.__stack_and_pad(final_outputs_ta, self.max_steps)
+            final_outputs_counts_ta = self.__stack_and_pad(final_outputs_counts_ta, self.max_steps)
+
+        return final_step, final_total_cost, final_states_ta, final_outputs_ta, final_outputs_counts_ta
 
     def __update_state_stack(
             self,
