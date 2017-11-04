@@ -200,14 +200,17 @@ class ObjectNetWriter:
 
             truth_current_choice = tf.gather(truth_outputs_padded, step, name="truth_current_choice")
 
-            with tf.variable_scope("current_cost"):
-                current_cost = tf.reduce_sum(tf.squared_difference(truth_current_choice, current_choice))
-                # Divide by the number of outputs at this step
-                # TODO: Check if we can simplify this
-                current_cost = tf.cond(
-                    tf.equal(num_outputs, 0),
-                    lambda: tf.constant(0, dtype=tf.float32),
-                    lambda: tf.divide(current_cost, tf.cast(num_outputs, dtype=tf.float32)))
+            if self.training:
+                with tf.variable_scope("current_cost"):
+                    current_cost = tf.reduce_sum(tf.squared_difference(truth_current_choice, current_choice))
+                    # Divide by the number of outputs at this step
+                    # TODO: Check if we can simplify this
+                    current_cost = tf.cond(
+                        tf.equal(num_outputs, 0),
+                        lambda: tf.constant(0, dtype=tf.float32),
+                        lambda: tf.divide(current_cost, tf.cast(num_outputs, dtype=tf.float32)))
+
+                total_cost = tf.add(total_cost, current_cost, name="total_cost_increment")
 
             if self.training:
                 # If we're training, the choice we send to the update_state_stack_fn should be determined by the truth
@@ -230,7 +233,7 @@ class ObjectNetWriter:
             return \
                 step + 1, \
                 (*stack), \
-                tf.add(total_cost, current_cost), \
+                total_cost, \
                 states_ta, \
                 outputs_ta, \
                 outputs_counts_ta, \
