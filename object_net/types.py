@@ -530,6 +530,8 @@ def create_from_dict(json_object: dict) -> List[Type]:
                 yield ObjectType.from_json(type_object)
             elif base == "list":
                 yield ListType.from_json(type_object)
+            else:
+                raise ValueError(f"Couldn't recognise base {base}")
 
     # Get types
     all_types = list(get_types())
