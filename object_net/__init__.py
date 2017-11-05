@@ -3,3 +3,4 @@ import object_net.object_net_writer
 import object_net.padder
 import object_net.state_stack
 import object_net.states
+import object_net.types
