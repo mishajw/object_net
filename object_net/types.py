@@ -3,6 +3,7 @@ from typing import Dict, List, Any, Tuple, Iterator, Callable
 from typing import Type as TypingType
 import itertools
 import json
+import numpy as np
 import queue
 import tensorflow as tf
 
@@ -205,10 +206,35 @@ class UnionType(Type):
             for i, _type in enumerate(self.types)]
 
     def get_state_output_pairs(self, value: Any) -> List[Tuple[int, List[float]]]:
-        raise NotImplementedError()
+        index: int = None
+
+        for i, _type in enumerate(self.types):
+            try:
+                _type.validate(value)
+
+                if index is None:
+                    index = i
+                else:
+                    raise ValueError(f"Value can be multiple types {value}")
+            except AssertionError:
+                pass
+
+        if index is None:
+            raise ValueError(f"Value can't be any type {value}")
+
+        output = [0.0] * len(self.types)
+        output[index] = 1.0
+
+        return [(self.get_initial_state().id, output)] + list(self.types[index].get_state_output_pairs(value))
 
     def get_value_from_state_output_pairs(self, state_output_pairs: Iterator[Tuple[int, List[float]]]) -> Any:
-        raise NotImplementedError()
+        state, output = next(state_output_pairs)
+
+        assert state == self.get_initial_state().id
+        assert len(output) == len(self.types)
+
+        chosen_type = self.types[output.index(max(output))]
+        return chosen_type.get_value_from_state_output_pairs(state_output_pairs)
 
 
 class OptionalType(Type):
